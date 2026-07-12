@@ -1,0 +1,29 @@
+name: Cortexive Codex runtime build
+
+on:
+  push:
+    branches:
+      - cortexive/tm-workflow-statusline
+
+permissions:
+  contents: read
+
+jobs:
+  linux-x86_64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: codex-rs
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582
+      - name: Build Codex CLI
+        run: cargo build --release -p codex-cli
+      - name: Upload runtime
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: codex-cortex-linux-x86_64
+          path: codex-rs/target/release/codex
+          if-no-files-found: error
+          retention-days: 7
