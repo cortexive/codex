@@ -1,11 +1,71 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ThreadWorkflowDisplay": {
+      "properties": {
+        "completedTasks": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "phase": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "progressPercent": {
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "totalTasks": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "workflow": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "completedTasks",
+        "progressPercent",
+        "totalTasks",
+        "workflow"
+      ],
+      "type": "object"
+    }
+  },
   "properties": {
     "name": {
       "type": "string"
     },
     "threadId": {
       "type": "string"
+    },
+    "workflowDisplay": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ThreadWorkflowDisplay"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Ephemeral, server-authoritative workflow context for the TUI footer. Omit or set to `null` to clear the footer context, or provide a value to replace it."
     }
   },
   "required": [

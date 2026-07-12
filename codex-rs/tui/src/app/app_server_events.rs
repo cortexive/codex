@@ -14,6 +14,7 @@ use codex_app_server_client::AppServerEvent;
 use codex_app_server_protocol::AuthMode;
 use codex_app_server_protocol::ServerNotification;
 use codex_app_server_protocol::ServerRequest;
+use codex_protocol::ThreadId;
 
 impl App {
     pub(super) fn refresh_mcp_startup_expected_servers_from_config(&mut self) {
@@ -74,6 +75,13 @@ impl App {
             }
             ServerNotification::McpServerStatusUpdated(_) => {
                 self.refresh_mcp_startup_expected_servers_from_config();
+            }
+            ServerNotification::ThreadNameUpdated(notification) => {
+                if let Ok(thread_id) = ThreadId::from_string(&notification.thread_id) {
+                    self.agent_navigation
+                        .set_workflow_display(thread_id, notification.workflow_display.clone());
+                    self.sync_active_agent_label();
+                }
             }
             ServerNotification::AccountRateLimitsUpdated(notification) => {
                 self.chat_widget

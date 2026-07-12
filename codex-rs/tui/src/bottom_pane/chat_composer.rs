@@ -4014,7 +4014,10 @@ impl ChatComposer {
     /// Returning `false` means the value was unchanged, so callers can skip redraw work. This
     /// field is intentionally just cached presentation state; `ChatComposer` does not infer which
     /// thread is active on its own.
-    pub(crate) fn set_active_agent_label(&mut self, active_agent_label: Option<String>) -> bool {
+    pub(crate) fn set_active_agent_label(
+        &mut self,
+        active_agent_label: Option<crate::multi_agents::ActiveAgentLabel>,
+    ) -> bool {
         if self.footer.active_agent_label == active_agent_label {
             return false;
         }
@@ -4274,7 +4277,7 @@ impl ChatComposer {
                         hint_rect.width.saturating_sub(FOOTER_INDENT_COLS as u16) as usize;
                     let status_line_active = uses_passive_footer_status_layout(&footer_props);
                     let combined_status_line = if status_line_active {
-                        passive_footer_status_line(&footer_props)
+                        passive_footer_status_line(&footer_props, Some(hint_rect.width as usize))
                     } else {
                         None
                     };
@@ -4311,6 +4314,7 @@ impl ChatComposer {
                             show_cycle_hint,
                             show_shortcuts_hint,
                             show_queue_hint,
+                            Some(hint_rect.width as usize),
                         )
                     };
                     let right_line =

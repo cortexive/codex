@@ -1784,7 +1784,10 @@ impl BottomPane {
     ///
     /// This keeps the footer plumbing cheap during thread transitions where `App` may recompute
     /// the label several times while the visible thread settles.
-    pub(crate) fn set_active_agent_label(&mut self, active_agent_label: Option<String>) {
+    pub(crate) fn set_active_agent_label(
+        &mut self,
+        active_agent_label: Option<crate::multi_agents::ActiveAgentLabel>,
+    ) {
         if self.composer.set_active_agent_label(active_agent_label) {
             self.request_redraw();
         }

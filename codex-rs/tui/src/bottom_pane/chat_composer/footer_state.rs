@@ -8,6 +8,7 @@ use crate::bottom_pane::footer::CollaborationModeIndicator;
 use crate::bottom_pane::footer::FooterMode;
 use crate::bottom_pane::footer::GoalStatusIndicator;
 use crate::key_hint::KeyBinding;
+use crate::multi_agents::ActiveAgentLabel;
 #[cfg(test)]
 use std::time::Duration;
 
@@ -29,7 +30,7 @@ pub(super) struct FooterState {
     pub(super) status_line_hyperlink_url: Option<String>,
     pub(super) status_line_enabled: bool,
     pub(super) side_conversation_context_label: Option<String>,
-    pub(super) active_agent_label: Option<String>,
+    pub(super) active_agent_label: Option<ActiveAgentLabel>,
     pub(super) external_editor_key: Option<KeyBinding>,
     pub(super) show_transcript_key: Option<KeyBinding>,
     pub(super) insert_newline_key: Option<KeyBinding>,

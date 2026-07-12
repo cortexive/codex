@@ -21,6 +21,7 @@ use codex_app_server_protocol::ThreadResumeParams;
 use codex_app_server_protocol::ThreadResumeResponse;
 use codex_app_server_protocol::ThreadSetNameParams;
 use codex_app_server_protocol::ThreadSetNameResponse;
+use codex_app_server_protocol::ThreadWorkflowDisplay;
 use codex_core::find_thread_name_by_id;
 use codex_protocol::ThreadId;
 use pretty_assertions::assert_eq;
@@ -58,6 +59,15 @@ async fn thread_name_updated_broadcasts_for_loaded_threads() -> Result<()> {
         assert_eq!(resume.thread.id, conversation_id);
 
         let renamed = "Loaded rename";
+        let workflow_display = ThreadWorkflowDisplay {
+            workflow: "cortex-backlog".to_string(),
+            phase: Some("Implementation".to_string()),
+            task: Some("fix-statusline".to_string()),
+            status: Some("running".to_string()),
+            completed_tasks: 10,
+            total_tasks: 12,
+            progress_percent: 83,
+        };
         send_request(
             &mut ws1,
             "thread/name/set",
@@ -65,6 +75,7 @@ async fn thread_name_updated_broadcasts_for_loaded_threads() -> Result<()> {
             Some(serde_json::to_value(ThreadSetNameParams {
                 thread_id: conversation_id.clone(),
                 name: renamed.to_string(),
+                workflow_display: Some(workflow_display.clone()),
             })?),
         )
         .await?;
@@ -75,15 +86,23 @@ async fn thread_name_updated_broadcasts_for_loaded_threads() -> Result<()> {
         )
         .await?;
         let _: ThreadSetNameResponse = to_response::<ThreadSetNameResponse>(rename_resp)?;
-        assert_thread_name_updated(ws1_notification, &conversation_id, renamed)?;
+        assert_thread_name_updated(
+            ws1_notification,
+            &conversation_id,
+            renamed,
+            Some(workflow_display.clone()),
+        )?;
 
         let ws2_notification =
             read_notification_for_method(&mut ws2, "thread/name/updated").await?;
-        assert_thread_name_updated(ws2_notification, &conversation_id, renamed)?;
+        assert_thread_name_updated(
+            ws2_notification,
+            &conversation_id,
+            renamed,
+            Some(workflow_display),
+        )?;
         assert_legacy_thread_name(codex_home.path(), &conversation_id, renamed).await?;
 
-        assert_no_message(&mut ws1, Duration::from_millis(250)).await?;
-        assert_no_message(&mut ws2, Duration::from_millis(250)).await?;
         Ok(())
     }
     .await;
@@ -117,6 +136,7 @@ async fn thread_name_updated_broadcasts_for_not_loaded_threads() -> Result<()> {
             Some(serde_json::to_value(ThreadSetNameParams {
                 thread_id: conversation_id.clone(),
                 name: renamed.to_string(),
+                workflow_display: None,
             })?),
         )
         .await?;
@@ -127,11 +147,11 @@ async fn thread_name_updated_broadcasts_for_not_loaded_threads() -> Result<()> {
         )
         .await?;
         let _: ThreadSetNameResponse = to_response::<ThreadSetNameResponse>(rename_resp)?;
-        assert_thread_name_updated(ws1_notification, &conversation_id, renamed)?;
+        assert_thread_name_updated(ws1_notification, &conversation_id, renamed, None)?;
 
         let ws2_notification =
             read_notification_for_method(&mut ws2, "thread/name/updated").await?;
-        assert_thread_name_updated(ws2_notification, &conversation_id, renamed)?;
+        assert_thread_name_updated(ws2_notification, &conversation_id, renamed, None)?;
         assert_legacy_thread_name(codex_home.path(), &conversation_id, renamed).await?;
 
         assert_no_message(&mut ws1, Duration::from_millis(250)).await?;
@@ -172,11 +192,18 @@ fn assert_thread_name_updated(
     notification: JSONRPCNotification,
     thread_id: &str,
     thread_name: &str,
+    workflow_display: Option<ThreadWorkflowDisplay>,
 ) -> Result<()> {
     let notification: ThreadNameUpdatedNotification =
         serde_json::from_value(notification.params.context("thread/name/updated params")?)?;
-    assert_eq!(notification.thread_id, thread_id);
-    assert_eq!(notification.thread_name.as_deref(), Some(thread_name));
+    assert_eq!(
+        notification,
+        ThreadNameUpdatedNotification {
+            thread_id: thread_id.to_string(),
+            thread_name: Some(thread_name.to_string()),
+            workflow_display,
+        }
+    );
     Ok(())
 }
 

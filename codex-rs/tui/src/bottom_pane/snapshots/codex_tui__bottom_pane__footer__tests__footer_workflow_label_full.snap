@@ -1,0 +1,6 @@
+---
+source: tui/src/bottom_pane/footer.rs
+assertion_line: 1527
+expression: terminal.backend()
+---
+"  wf > Long implementation phase > task [1/2 50%]                                                    100% context left  "

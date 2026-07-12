@@ -1059,6 +1059,7 @@ async fn thread_name_set_is_reflected_in_read_list_and_resume() -> Result<()> {
         .send_thread_set_name_request(ThreadSetNameParams {
             thread_id: conversation_id.clone(),
             name: new_name.to_string(),
+            workflow_display: None,
         })
         .await?;
     let set_resp: JSONRPCResponse = timeout(

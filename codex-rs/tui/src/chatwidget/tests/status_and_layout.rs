@@ -2768,6 +2768,7 @@ async fn renamed_thread_footer_title_snapshot() {
             codex_app_server_protocol::ThreadNameUpdatedNotification {
                 thread_id: thread_id.to_string(),
                 thread_name: Some("Roadmap cleanup".to_string()),
+                workflow_display: None,
             },
         ),
         /*replay_kind*/ None,

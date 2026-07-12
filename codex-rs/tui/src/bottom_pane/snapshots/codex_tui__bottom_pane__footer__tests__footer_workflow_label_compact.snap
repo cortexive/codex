@@ -1,0 +1,6 @@
+---
+source: tui/src/bottom_pane/footer.rs
+assertion_line: 1533
+expression: terminal.backend()
+---
+"  wf > task [1/2 50%]                                        100% context left  "

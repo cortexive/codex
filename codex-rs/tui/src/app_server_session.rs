@@ -880,6 +880,7 @@ impl AppServerSession {
                 params: ThreadSetNameParams {
                     thread_id: thread_id.to_string(),
                     name,
+                    workflow_display: None,
                 },
             })
             .await

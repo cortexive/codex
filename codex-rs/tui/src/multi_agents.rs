@@ -13,6 +13,7 @@ use codex_app_server_protocol::CollabAgentTool;
 use codex_app_server_protocol::CollabAgentToolCallStatus;
 use codex_app_server_protocol::SubAgentActivityKind;
 use codex_app_server_protocol::ThreadItem;
+use codex_app_server_protocol::ThreadWorkflowDisplay;
 use codex_protocol::ThreadId;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use crossterm::event::KeyCode;
@@ -42,6 +43,53 @@ pub(crate) struct AgentPickerThreadEntry {
     pub(crate) is_running: bool,
     /// Whether the thread has emitted a close event and should render dimmed.
     pub(crate) is_closed: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ActiveAgentLabel {
+    pub(crate) full: String,
+    pub(crate) compact: Option<String>,
+}
+
+impl ActiveAgentLabel {
+    pub(crate) fn plain(label: String) -> Self {
+        Self {
+            full: label,
+            compact: None,
+        }
+    }
+
+    pub(crate) fn workflow(display: &ThreadWorkflowDisplay) -> Self {
+        let indicator = if display.status.as_deref() == Some("completed") {
+            "✓"
+        } else {
+            ""
+        };
+        let counts = if display.total_tasks > 0 {
+            format!("{}/{} ", display.completed_tasks, display.total_tasks)
+        } else {
+            String::new()
+        };
+        let progress = format!("[{indicator}{counts}{}%]", display.progress_percent);
+        let full_path = [
+            Some(display.workflow.as_str()),
+            display.phase.as_deref(),
+            display.task.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" > ");
+        let compact_path = [Some(display.workflow.as_str()), display.task.as_deref()]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" > ");
+        let full = format!("{full_path} {progress}");
+        let compact = format!("{compact_path} {progress}");
+        let compact = (display.phase.is_some() && compact != full).then_some(compact);
+        Self { full, compact }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

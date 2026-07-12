@@ -1567,11 +1567,36 @@ impl ThreadRequestProcessor {
         params: ThreadSetNameParams,
     ) -> Result<(ThreadSetNameResponse, Option<ThreadNameUpdatedNotification>), JSONRPCErrorError>
     {
-        let ThreadSetNameParams { thread_id, name } = params;
+        let ThreadSetNameParams {
+            thread_id,
+            name,
+            workflow_display,
+        } = params;
         let thread_id = ThreadId::from_string(&thread_id)
             .map_err(|err| invalid_request(format!("invalid thread id: {err}")))?;
         let Some(name) = codex_core::util::normalize_thread_name(&name) else {
             return Err(invalid_request("thread name must not be empty"));
+        };
+        let workflow_display = match workflow_display {
+            None => None,
+            Some(mut display) => {
+                let Some(workflow) = codex_core::util::normalize_thread_name(&display.workflow)
+                else {
+                    return Err(invalid_request("workflow display name must not be empty"));
+                };
+                display.workflow = workflow;
+                display.phase = display
+                    .phase
+                    .and_then(|value| codex_core::util::normalize_thread_name(&value));
+                display.task = display
+                    .task
+                    .and_then(|value| codex_core::util::normalize_thread_name(&value));
+                display.status = display
+                    .status
+                    .and_then(|value| codex_core::util::normalize_thread_name(&value));
+                display.progress_percent = display.progress_percent.min(100);
+                Some(display)
+            }
         };
 
         let _thread_list_state_permit = self.acquire_thread_list_state_permit().await?;
@@ -1592,6 +1617,7 @@ impl ThreadRequestProcessor {
             Some(ThreadNameUpdatedNotification {
                 thread_id: thread_id.to_string(),
                 thread_name: Some(name),
+                workflow_display,
             }),
         ))
     }

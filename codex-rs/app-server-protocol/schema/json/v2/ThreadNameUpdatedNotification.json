@@ -1,5 +1,54 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ThreadWorkflowDisplay": {
+      "properties": {
+        "completedTasks": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "phase": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "progressPercent": {
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "totalTasks": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "workflow": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "completedTasks",
+        "progressPercent",
+        "totalTasks",
+        "workflow"
+      ],
+      "type": "object"
+    }
+  },
   "properties": {
     "threadId": {
       "type": "string"
@@ -8,6 +57,16 @@
       "type": [
         "string",
         "null"
+      ]
+    },
+    "workflowDisplay": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ThreadWorkflowDisplay"
+        },
+        {
+          "type": "null"
+        }
       ]
     }
   },

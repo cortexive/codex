@@ -18,11 +18,13 @@
 //! order. Once a thread id is observed it keeps its place in the cycle even if the entry is later
 //! updated or marked closed.
 
+use crate::multi_agents::ActiveAgentLabel;
 use crate::multi_agents::AgentPickerThreadEntry;
 use crate::multi_agents::SubAgentActivityDisplay;
 use crate::multi_agents::format_agent_picker_item_name;
 use crate::multi_agents::next_agent_shortcut;
 use crate::multi_agents::previous_agent_shortcut;
+use codex_app_server_protocol::ThreadWorkflowDisplay;
 use codex_protocol::ThreadId;
 use ratatui::text::Span;
 use std::collections::HashMap;
@@ -42,6 +44,8 @@ pub(crate) struct AgentNavigationState {
     threads: HashMap<ThreadId, AgentPickerThreadEntry>,
     /// Stable first-seen traversal order for picker rows and keyboard cycling.
     order: Vec<ThreadId>,
+    /// Ephemeral workflow context supplied by the external app-server bridge.
+    workflow_displays: HashMap<ThreadId, ThreadWorkflowDisplay>,
 }
 
 /// Direction of keyboard traversal through the stable picker order.
@@ -70,6 +74,18 @@ impl AgentNavigationState {
     /// agents available yet." rather than constructing picker rows from an empty state.
     pub(crate) fn is_empty(&self) -> bool {
         self.threads.is_empty()
+    }
+
+    pub(crate) fn set_workflow_display(
+        &mut self,
+        thread_id: ThreadId,
+        workflow_display: Option<ThreadWorkflowDisplay>,
+    ) {
+        if let Some(workflow_display) = workflow_display {
+            self.workflow_displays.insert(thread_id, workflow_display);
+        } else {
+            self.workflow_displays.remove(&thread_id);
+        }
     }
 
     /// Inserts or updates a picker entry while preserving first-seen traversal order.
@@ -162,6 +178,7 @@ impl AgentNavigationState {
     pub(crate) fn clear(&mut self) {
         self.threads.clear();
         self.order.clear();
+        self.workflow_displays.clear();
     }
 
     /// Removes a tracked thread entirely from picker metadata and traversal order.
@@ -171,6 +188,7 @@ impl AgentNavigationState {
     /// would leave ghost rows in `/agent`.
     pub(crate) fn remove(&mut self, thread_id: ThreadId) {
         self.threads.remove(&thread_id);
+        self.workflow_displays.remove(&thread_id);
         self.order.retain(|candidate| *candidate != thread_id);
     }
 
@@ -264,13 +282,15 @@ impl AgentNavigationState {
         &self,
         current_displayed_thread_id: Option<ThreadId>,
         primary_thread_id: Option<ThreadId>,
-    ) -> Option<String> {
+    ) -> Option<ActiveAgentLabel> {
+        let thread_id = current_displayed_thread_id?;
+        let is_primary = primary_thread_id == Some(thread_id);
+        if is_primary && let Some(workflow_display) = self.workflow_displays.get(&thread_id) {
+            return Some(ActiveAgentLabel::workflow(workflow_display));
+        }
         if self.threads.len() <= 1 {
             return None;
         }
-
-        let thread_id = current_displayed_thread_id?;
-        let is_primary = primary_thread_id == Some(thread_id);
         Some(
             self.threads
                 .get(&thread_id)
@@ -281,18 +301,18 @@ impl AgentNavigationState {
                             .as_deref()
                             .filter(|agent_path| !agent_path.trim().is_empty())
                     {
-                        return format!("`{agent_path}`");
+                        return ActiveAgentLabel::plain(format!("`{agent_path}`"));
                     }
-                    format_agent_picker_item_name(
+                    ActiveAgentLabel::plain(format_agent_picker_item_name(
                         entry.agent_nickname.as_deref(),
                         entry.agent_role.as_deref(),
                         is_primary,
-                    )
+                    ))
                 })
                 .unwrap_or_else(|| {
-                    format_agent_picker_item_name(
+                    ActiveAgentLabel::plain(format_agent_picker_item_name(
                         /*agent_nickname*/ None, /*agent_role*/ None, is_primary,
-                    )
+                    ))
                 }),
         )
     }
@@ -410,11 +430,43 @@ mod tests {
 
         assert_eq!(
             state.active_agent_label(Some(first_agent_id), Some(main_thread_id)),
-            Some("Robie [explorer]".to_string())
+            Some(ActiveAgentLabel::plain("Robie [explorer]".to_string()))
         );
         assert_eq!(
             state.active_agent_label(Some(main_thread_id), Some(main_thread_id)),
-            Some("Main [default]".to_string())
+            Some(ActiveAgentLabel::plain("Main [default]".to_string()))
+        );
+    }
+
+    #[test]
+    fn primary_workflow_label_is_visible_in_single_thread_sessions() {
+        let mut state = AgentNavigationState::default();
+        let main_thread_id = ThreadId::new();
+        state.upsert(
+            main_thread_id,
+            /*agent_nickname*/ None,
+            /*agent_role*/ None,
+            /*is_closed*/ false,
+        );
+        state.set_workflow_display(
+            main_thread_id,
+            Some(ThreadWorkflowDisplay {
+                workflow: "cortex-backlog".to_string(),
+                phase: Some("Implementation".to_string()),
+                task: Some("fix-statusline".to_string()),
+                status: Some("running".to_string()),
+                completed_tasks: 10,
+                total_tasks: 12,
+                progress_percent: 83,
+            }),
+        );
+
+        assert_eq!(
+            state.active_agent_label(Some(main_thread_id), Some(main_thread_id)),
+            Some(ActiveAgentLabel {
+                full: "cortex-backlog > Implementation > fix-statusline [10/12 83%]".to_string(),
+                compact: Some("cortex-backlog > fix-statusline [10/12 83%]".to_string()),
+            })
         );
     }
 }

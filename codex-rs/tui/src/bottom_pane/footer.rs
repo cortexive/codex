@@ -43,6 +43,7 @@
 //! `FooterProps` mapping.
 use crate::key_hint;
 use crate::key_hint::KeyBinding;
+use crate::multi_agents::ActiveAgentLabel;
 use crate::render::line_utils::prefix_lines;
 use crate::status::format_tokens_compact;
 use crate::ui_consts::FOOTER_INDENT_COLS;
@@ -54,6 +55,7 @@ use ratatui::text::Line;
 use ratatui::text::Span;
 use ratatui::widgets::Paragraph;
 use ratatui::widgets::Widget;
+use unicode_width::UnicodeWidthStr;
 
 /// The rendering inputs for the footer area under the composer.
 ///
@@ -83,7 +85,7 @@ pub(crate) struct FooterProps {
     ///
     /// When both this label and the configured status line are available, they are rendered on the
     /// same row separated by ` · `.
-    pub(crate) active_agent_label: Option<String>,
+    pub(crate) active_agent_label: Option<ActiveAgentLabel>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -250,6 +252,7 @@ pub(crate) fn footer_height(props: &FooterProps) -> u16 {
         /*show_cycle_hint*/ false,
         show_shortcuts_hint,
         show_queue_hint,
+        /*terminal_width*/ None,
     )
     .len() as u16
 }
@@ -287,6 +290,7 @@ pub(crate) fn render_footer_from_props(
             show_cycle_hint,
             show_shortcuts_hint,
             show_queue_hint,
+            Some(area.width as usize),
         ),
         " ".repeat(FOOTER_INDENT_COLS).into(),
         " ".repeat(FOOTER_INDENT_COLS).into(),
@@ -712,11 +716,12 @@ fn footer_from_props_lines(
     show_cycle_hint: bool,
     show_shortcuts_hint: bool,
     show_queue_hint: bool,
+    terminal_width: Option<usize>,
 ) -> Vec<Line<'static>> {
     let key_hints = props.key_hints;
     // Passive footer context can come from the configurable status line, the
     // active agent label, or both combined.
-    if let Some(status_line) = passive_footer_status_line(props) {
+    if let Some(status_line) = passive_footer_status_line(props, terminal_width) {
         return vec![status_line];
     }
     match props.mode {
@@ -777,7 +782,10 @@ fn footer_from_props_lines(
 /// The returned line may contain the configured status line, the currently viewed agent label, or
 /// both combined. Active instructional states such as quit reminders, shortcut overlays, and queue
 /// prompts deliberately return `None` so those call-to-action hints stay visible.
-pub(crate) fn passive_footer_status_line(props: &FooterProps) -> Option<Line<'static>> {
+pub(crate) fn passive_footer_status_line(
+    props: &FooterProps,
+    terminal_width: Option<usize>,
+) -> Option<Line<'static>> {
     if !shows_passive_footer_line(props) {
         return None;
     }
@@ -789,11 +797,20 @@ pub(crate) fn passive_footer_status_line(props: &FooterProps) -> Option<Line<'st
     };
 
     if let Some(active_agent_label) = props.active_agent_label.as_ref() {
+        let active_agent_label = match (terminal_width, active_agent_label.compact.as_deref()) {
+            (Some(terminal_width), Some(compact))
+                if UnicodeWidthStr::width(active_agent_label.full.as_str())
+                    > terminal_width.saturating_mul(40) / 100 =>
+            {
+                compact
+            }
+            _ => active_agent_label.full.as_str(),
+        };
         if let Some(existing) = line.as_mut() {
             existing.spans.push(" · ".dim());
-            existing.spans.push(active_agent_label.clone().dim());
+            existing.spans.push(active_agent_label.to_string().dim());
         } else {
-            line = Some(Line::from(active_agent_label.clone()).dim());
+            line = Some(Line::from(active_agent_label.to_string()).dim());
         }
     }
 
@@ -830,6 +847,7 @@ pub(crate) fn footer_line_width(
     show_cycle_hint: bool,
     show_shortcuts_hint: bool,
     show_queue_hint: bool,
+    terminal_width: Option<usize>,
 ) -> u16 {
     footer_from_props_lines(
         props,
@@ -837,6 +855,7 @@ pub(crate) fn footer_line_width(
         show_cycle_hint,
         show_shortcuts_hint,
         show_queue_hint,
+        terminal_width,
     )
     .last()
     .map(|line| line.width() as u16)
@@ -1337,7 +1356,7 @@ mod tests {
                 };
                 let status_line_active = uses_passive_footer_status_layout(props);
                 let passive_status_line = if status_line_active {
-                    passive_footer_status_line(props)
+                    passive_footer_status_line(props, Some(area.width as usize))
                 } else {
                     None
                 };
@@ -1370,6 +1389,7 @@ mod tests {
                         show_cycle_hint,
                         show_shortcuts_hint,
                         show_queue_hint,
+                        Some(area.width as usize),
                     )
                 };
                 let right_line = if status_line_active {
@@ -1976,7 +1996,7 @@ mod tests {
             status_line_value: None,
             status_line_enabled: false,
             key_hints: FooterKeyHints::default_bindings(),
-            active_agent_label: Some("Robie [explorer]".to_string()),
+            active_agent_label: Some(ActiveAgentLabel::plain("Robie [explorer]".to_string())),
         };
 
         snapshot_footer("footer_active_agent_label", props);
@@ -1993,10 +2013,57 @@ mod tests {
             status_line_value: Some(Line::from("Status line content".to_string())),
             status_line_enabled: true,
             key_hints: FooterKeyHints::default_bindings(),
-            active_agent_label: Some("Robie [explorer]".to_string()),
+            active_agent_label: Some(ActiveAgentLabel::plain("Robie [explorer]".to_string())),
         };
 
         snapshot_footer("footer_status_line_with_active_agent_label", props);
+    }
+
+    #[test]
+    fn footer_workflow_label_omits_phase_above_forty_percent() {
+        let props = FooterProps {
+            mode: FooterMode::ComposerEmpty,
+            esc_backtrack_hint: false,
+            use_shift_enter_hint: false,
+            is_task_running: false,
+            queue_submissions: false,
+            collaboration_modes_enabled: false,
+            is_wsl: false,
+            quit_shortcut_key: key_hint::ctrl(KeyCode::Char('c')),
+            status_line_value: None,
+            status_line_enabled: false,
+            key_hints: FooterKeyHints::default_bindings(),
+            active_agent_label: Some(ActiveAgentLabel {
+                full: "wf > Long implementation phase > task [1/2 50%]".to_string(),
+                compact: Some("wf > task [1/2 50%]".to_string()),
+            }),
+        };
+
+        assert_eq!(
+            passive_footer_status_line(&props, Some(120))
+                .expect("workflow footer line")
+                .to_string(),
+            "wf > Long implementation phase > task [1/2 50%]"
+        );
+        assert_eq!(
+            passive_footer_status_line(&props, Some(80))
+                .expect("workflow footer line")
+                .to_string(),
+            "wf > task [1/2 50%]"
+        );
+
+        snapshot_footer_with_mode_indicator(
+            "footer_workflow_label_full",
+            /*width*/ 120,
+            &props,
+            /*collaboration_mode_indicator*/ None,
+        );
+        snapshot_footer_with_mode_indicator(
+            "footer_workflow_label_compact",
+            /*width*/ 80,
+            &props,
+            /*collaboration_mode_indicator*/ None,
+        );
     }
 
     #[test]

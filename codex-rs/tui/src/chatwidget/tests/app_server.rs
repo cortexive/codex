@@ -1266,6 +1266,7 @@ async fn live_app_server_invalid_thread_name_update_is_ignored() {
             codex_app_server_protocol::ThreadNameUpdatedNotification {
                 thread_id: "not-a-thread-id".to_string(),
                 thread_name: Some("bad update".to_string()),
+                workflow_display: None,
             },
         ),
         /*replay_kind*/ None,
@@ -1287,6 +1288,7 @@ async fn live_app_server_thread_name_update_shows_resume_hint() {
             codex_app_server_protocol::ThreadNameUpdatedNotification {
                 thread_id: thread_id.to_string(),
                 thread_name: Some("review-fix".to_string()),
+                workflow_display: None,
             },
         ),
         /*replay_kind*/ None,

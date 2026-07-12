@@ -713,9 +713,34 @@ pub struct ThreadDecrementElicitationResponse {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub struct ThreadWorkflowDisplay {
+    pub workflow: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub phase: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub task: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub status: Option<String>,
+    pub completed_tasks: u64,
+    pub total_tasks: u64,
+    pub progress_percent: u8,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub struct ThreadSetNameParams {
     pub thread_id: String,
     pub name: String,
+    /// Ephemeral, server-authoritative workflow context for the TUI footer.
+    /// Omit or set to `null` to clear the footer context, or provide a value to
+    /// replace it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub workflow_display: Option<ThreadWorkflowDisplay>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -1475,6 +1500,7 @@ pub struct ThreadNameUpdatedNotification {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub thread_name: Option<String>,
+    pub workflow_display: Option<ThreadWorkflowDisplay>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
