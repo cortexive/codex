@@ -224,6 +224,20 @@ impl ChatWidget {
         }
     }
 
+    /// Refreshes externally managed thread identity without presenting it as a
+    /// user-initiated `/rename` or advancing the queued-input state machine.
+    pub(super) fn on_thread_name_synced(
+        &mut self,
+        thread_id: ThreadId,
+        thread_name: Option<String>,
+    ) {
+        if self.thread_id == Some(thread_id) {
+            self.thread_name = thread_name;
+            self.refresh_status_surfaces();
+            self.request_redraw();
+        }
+    }
+
     pub(super) fn set_skills(&mut self, skills: Option<Vec<SkillMetadata>>) {
         self.bottom_pane.set_skills(skills);
     }

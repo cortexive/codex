@@ -35,9 +35,14 @@ impl ChatWidget {
                 )));
             }
             ServerNotification::ThreadNameUpdated(notification) => {
+                let is_workflow_refresh = notification.workflow_display.is_some();
                 match ThreadId::from_string(&notification.thread_id) {
                     Ok(thread_id) => {
-                        self.on_thread_name_updated(thread_id, notification.thread_name)
+                        if is_workflow_refresh {
+                            self.on_thread_name_synced(thread_id, notification.thread_name);
+                        } else {
+                            self.on_thread_name_updated(thread_id, notification.thread_name);
+                        }
                     }
                     Err(err) => {
                         tracing::warn!(

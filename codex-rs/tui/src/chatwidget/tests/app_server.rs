@@ -1302,6 +1302,35 @@ async fn live_app_server_thread_name_update_shows_resume_hint() {
 }
 
 #[tokio::test]
+async fn live_app_server_workflow_name_update_is_silent() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let thread_id = ThreadId::new();
+    chat.thread_id = Some(thread_id);
+
+    chat.handle_server_notification(
+        ServerNotification::ThreadNameUpdated(
+            codex_app_server_protocol::ThreadNameUpdatedNotification {
+                thread_id: thread_id.to_string(),
+                thread_name: Some("focused-task".to_string()),
+                workflow_display: Some(codex_app_server_protocol::ThreadWorkflowDisplay {
+                    workflow: "cortex-backlog".to_string(),
+                    phase: Some("Implementation".to_string()),
+                    task: Some("focused-task".to_string()),
+                    status: Some("running".to_string()),
+                    completed_tasks: 10,
+                    total_tasks: 12,
+                    progress_percent: 83,
+                }),
+            },
+        ),
+        /*replay_kind*/ None,
+    );
+
+    assert_eq!(chat.thread_name, Some("focused-task".to_string()));
+    assert!(drain_insert_history(&mut rx).is_empty());
+}
+
+#[tokio::test]
 async fn live_app_server_thread_closed_requests_immediate_exit() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
 

@@ -18,6 +18,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582
+      - name: Test workflow statusline notification handling
+        run: cargo test --release -p codex-tui live_app_server_workflow_name_update_is_silent
       - name: Build Codex CLI
         run: cargo build --release -p codex-cli
       - name: Upload runtime
