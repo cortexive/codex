@@ -115,7 +115,12 @@ impl ChatWidget {
             "status line setup confirmed with items: {items:#?}, use_theme_colors: {use_theme_colors}"
         );
         let ids = items.iter().map(ToString::to_string).collect::<Vec<_>>();
-        self.config.tui_status_line = Some(ids);
+        let relay_thread_key = self.thread_id.map(|thread_id| thread_id.to_string());
+        self.config.tui_status_line = crate::cli::relay_user_status_line_items(
+            relay_thread_key.as_deref(),
+            Some(ids),
+            &DEFAULT_STATUS_LINE_ITEMS,
+        );
         self.config.tui_status_line_use_colors = use_theme_colors;
         self.refresh_status_line();
     }

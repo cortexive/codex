@@ -85,14 +85,19 @@ pub(crate) fn status_line_from_segments<I>(
 where
     I: IntoIterator<Item = (StatusLineItem, String)>,
 {
-    status_line_from_segments_with_resolver(segments, use_theme_colors, |accent| {
-        foreground_style_for_scopes(accent.scopes())
-    })
+    let relay_token = crate::cli::cortex_relay_token();
+    status_line_from_segments_with_resolver(
+        segments,
+        use_theme_colors,
+        relay_token.as_deref(),
+        |accent| foreground_style_for_scopes(accent.scopes()),
+    )
 }
 
 fn status_line_from_segments_with_resolver<I, F>(
     segments: I,
     use_theme_colors: bool,
+    relay_token: Option<&str>,
     theme_style_for_accent: F,
 ) -> Option<Line<'static>>
 where
@@ -100,27 +105,57 @@ where
     F: Fn(StatusLineAccent) -> Option<Style>,
 {
     let mut spans = Vec::new();
+    if let Some(token) = relay_token {
+        push_status_line_segment(
+            &mut spans,
+            StatusLineItem::ThreadTitle,
+            token.to_string(),
+            use_theme_colors,
+            &theme_style_for_accent,
+        );
+    }
     for (item, text) in segments {
-        if !spans.is_empty() {
-            spans.push(STATUS_LINE_SEPARATOR.dim());
+        if relay_token.is_some() && item == StatusLineItem::ThreadTitle {
+            continue;
         }
-        let style = if use_theme_colors {
-            let accent = StatusLineAccent::for_item(item);
-            soften_status_line_style(
-                theme_style_for_accent(accent).unwrap_or_else(|| accent.fallback_style()),
-            )
-        } else {
-            Style::default().dim()
-        };
-        let style = if item == StatusLineItem::PullRequestNumber {
-            style.underlined()
-        } else {
-            style
-        };
-        spans.push(Span::styled(text, style));
+        push_status_line_segment(
+            &mut spans,
+            item,
+            text,
+            use_theme_colors,
+            &theme_style_for_accent,
+        );
     }
 
     (!spans.is_empty()).then(|| Line::from(spans))
+}
+
+fn push_status_line_segment<F>(
+    spans: &mut Vec<Span<'static>>,
+    item: StatusLineItem,
+    text: String,
+    use_theme_colors: bool,
+    theme_style_for_accent: &F,
+) where
+    F: Fn(StatusLineAccent) -> Option<Style>,
+{
+    if !spans.is_empty() {
+        spans.push(STATUS_LINE_SEPARATOR.dim());
+    }
+    let style = if use_theme_colors {
+        let accent = StatusLineAccent::for_item(item);
+        soften_status_line_style(
+            theme_style_for_accent(accent).unwrap_or_else(|| accent.fallback_style()),
+        )
+    } else {
+        Style::default().dim()
+    };
+    let style = if item == StatusLineItem::PullRequestNumber {
+        style.underlined()
+    } else {
+        style
+    };
+    spans.push(Span::styled(text, style));
 }
 
 fn soften_status_line_style(mut style: Style) -> Style {
@@ -179,6 +214,7 @@ fn soften_rgb_channel(channel: u8, luma: u16) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use insta::assert_snapshot;
     use pretty_assertions::assert_eq;
     use ratatui::style::Modifier;
 
@@ -198,6 +234,7 @@ mod tests {
                 (StatusLineItem::GitBranch, "main".to_string()),
             ],
             /*use_theme_colors*/ true,
+            /*relay_token*/ None,
             |_| None,
         )
         .expect("status line");
@@ -212,6 +249,39 @@ mod tests {
     }
 
     #[test]
+    fn relay_token_is_prepended_and_replaces_a_configured_thread_title() {
+        let line = status_line_from_segments_with_resolver(
+            [
+                (
+                    StatusLineItem::ThreadTitle,
+                    "persisted thread name".to_string(),
+                ),
+                (StatusLineItem::CurrentDir, "/repo".to_string()),
+            ],
+            /*use_theme_colors*/ true,
+            Some("ANVIL-0001"),
+            |_| None,
+        )
+        .expect("status line");
+
+        assert_eq!(line_text(&line), "ANVIL-0001 · /repo");
+        assert_snapshot!(line_text(&line), @"ANVIL-0001 · /repo");
+    }
+
+    #[test]
+    fn relay_token_renders_even_without_other_segments() {
+        let line = status_line_from_segments_with_resolver(
+            Vec::<(StatusLineItem, String)>::new(),
+            /*use_theme_colors*/ false,
+            Some("ANVIL-0001"),
+            |_| None,
+        )
+        .expect("relay status line");
+
+        assert_eq!(line_text(&line), "ANVIL-0001");
+    }
+
+    #[test]
     fn status_line_segments_dim_separators_and_use_theme_styles_first() {
         let line = status_line_from_segments_with_resolver(
             [
@@ -219,6 +289,7 @@ mod tests {
                 (StatusLineItem::ContextUsed, "Context 12% used".to_string()),
             ],
             /*use_theme_colors*/ true,
+            /*relay_token*/ None,
             |accent| match accent {
                 StatusLineAccent::Model => Some(Style::default().red()),
                 _ => None,
@@ -239,6 +310,7 @@ mod tests {
         let line = status_line_from_segments_with_resolver(
             [(StatusLineItem::ModelName, "gpt-5".to_string())],
             /*use_theme_colors*/ true,
+            /*relay_token*/ None,
             |_| Some(Style::default().fg(Color::Rgb(255, 0, 0))),
         )
         .expect("status line");
@@ -255,6 +327,7 @@ mod tests {
                 (StatusLineItem::ContextUsed, "Context 12% used".to_string()),
             ],
             /*use_theme_colors*/ false,
+            /*relay_token*/ None,
             |_| Some(Style::default().red()),
         )
         .expect("status line");
@@ -272,6 +345,7 @@ mod tests {
         let line = status_line_from_segments_with_resolver(
             [(StatusLineItem::PullRequestNumber, "PR #20252".to_string())],
             /*use_theme_colors*/ false,
+            /*relay_token*/ None,
             |_| None,
         )
         .expect("status line");
@@ -292,6 +366,7 @@ mod tests {
             status_line_from_segments_with_resolver(
                 Vec::<(StatusLineItem, String)>::new(),
                 /*use_theme_colors*/ true,
+                /*relay_token*/ None,
                 |_| None,
             ),
             None
