@@ -80,18 +80,16 @@ impl ChatWidget {
                 if restore_explicit_empty_status_line {
                     self.config.tui_status_line = Some(vec!["thread-title".to_string()]);
                 }
-                crate::status::set_cortex_relay_token(
-                    token,
-                    restore_explicit_empty_status_line,
-                );
+                crate::status::set_cortex_relay_token(token, restore_explicit_empty_status_line);
             }
             crate::status::CortexRelayUpdate::Clear => {
-                let restore_explicit_empty_status_line =
-                    crate::status::clear_cortex_relay_token();
+                let restore_explicit_empty_status_line = crate::status::clear_cortex_relay_token();
                 if restore_explicit_empty_status_line
-                    && self.config.tui_status_line.as_ref().is_some_and(|items| {
-                        items.len() == 1 && items[0] == "thread-title"
-                    })
+                    && self
+                        .config
+                        .tui_status_line
+                        .as_ref()
+                        .is_some_and(|items| items.len() == 1 && items[0] == "thread-title")
                 {
                     self.config.tui_status_line = Some(Vec::new());
                 }
