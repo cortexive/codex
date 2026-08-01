@@ -85,9 +85,13 @@ pub(crate) fn status_line_from_segments<I>(
 where
     I: IntoIterator<Item = (StatusLineItem, String)>,
 {
-    status_line_from_segments_with_resolver(segments, use_theme_colors, |accent| {
-        foreground_style_for_scopes(accent.scopes())
-    })
+    let relay_token = crate::status::cortex_relay_token();
+    status_line_from_segments_with_relay_and_resolver(
+        segments,
+        use_theme_colors,
+        relay_token.as_deref(),
+        |accent| foreground_style_for_scopes(accent.scopes()),
+    )
 }
 
 fn status_line_from_segments_with_resolver<I, F>(
@@ -99,28 +103,80 @@ where
     I: IntoIterator<Item = (StatusLineItem, String)>,
     F: Fn(StatusLineAccent) -> Option<Style>,
 {
+    status_line_from_segments_with_relay_and_resolver(
+        segments,
+        use_theme_colors,
+        /*relay_token*/ None,
+        theme_style_for_accent,
+    )
+}
+
+fn status_line_from_segments_with_relay_and_resolver<I, F>(
+    segments: I,
+    use_theme_colors: bool,
+    relay_token: Option<&str>,
+    theme_style_for_accent: F,
+) -> Option<Line<'static>>
+where
+    I: IntoIterator<Item = (StatusLineItem, String)>,
+    F: Fn(StatusLineAccent) -> Option<Style>,
+{
     let mut spans = Vec::new();
+    if let Some(token) = relay_token {
+        push_status_line_segment(
+            &mut spans,
+            StatusLineItem::ThreadTitle,
+            token.to_string(),
+            use_theme_colors,
+            /*prominent*/ true,
+            &theme_style_for_accent,
+        );
+    }
     for (item, text) in segments {
-        if !spans.is_empty() {
-            spans.push(STATUS_LINE_SEPARATOR.dim());
+        if relay_token.is_some() && item == StatusLineItem::ThreadTitle {
+            continue;
         }
-        let style = if use_theme_colors {
-            let accent = StatusLineAccent::for_item(item);
-            soften_status_line_style(
-                theme_style_for_accent(accent).unwrap_or_else(|| accent.fallback_style()),
-            )
-        } else {
-            Style::default().dim()
-        };
-        let style = if item == StatusLineItem::PullRequestNumber {
-            style.underlined()
-        } else {
-            style
-        };
-        spans.push(Span::styled(text, style));
+        push_status_line_segment(
+            &mut spans,
+            item,
+            text,
+            use_theme_colors,
+            /*prominent*/ false,
+            &theme_style_for_accent,
+        );
     }
 
     (!spans.is_empty()).then(|| Line::from(spans))
+}
+
+fn push_status_line_segment<F>(
+    spans: &mut Vec<Span<'static>>,
+    item: StatusLineItem,
+    text: String,
+    use_theme_colors: bool,
+    prominent: bool,
+    theme_style_for_accent: &F,
+) where
+    F: Fn(StatusLineAccent) -> Option<Style>,
+{
+    if !spans.is_empty() {
+        spans.push(STATUS_LINE_SEPARATOR.dim());
+    }
+    let style = if use_theme_colors {
+        let accent = StatusLineAccent::for_item(item);
+        soften_status_line_style(
+            theme_style_for_accent(accent).unwrap_or_else(|| accent.fallback_style()),
+        )
+    } else {
+        Style::default().dim()
+    };
+    let style = if item == StatusLineItem::PullRequestNumber {
+        style.underlined()
+    } else {
+        style
+    };
+    let style = if prominent { style.bold() } else { style };
+    spans.push(Span::styled(text, style));
 }
 
 fn soften_status_line_style(mut style: Style) -> Style {
@@ -209,6 +265,44 @@ mod tests {
         assert!(!line.spans[2].style.add_modifier.contains(Modifier::DIM));
         assert_eq!(line.spans[4].style.fg, Some(Color::Magenta));
         assert!(!line.spans[4].style.add_modifier.contains(Modifier::DIM));
+    }
+
+    #[test]
+    fn relay_token_is_first_and_replaces_the_thread_title_slot() {
+        let line = status_line_from_segments_with_relay_and_resolver(
+            [
+                (
+                    StatusLineItem::ThreadTitle,
+                    "persisted thread name".to_string(),
+                ),
+                (StatusLineItem::CurrentDir, "/repo".to_string()),
+            ],
+            /*use_theme_colors*/ true,
+            Some("ANVIL-0002"),
+            |_| None,
+        )
+        .expect("status line");
+
+        assert_eq!(line_text(&line), "ANVIL-0002 · /repo");
+        assert!(
+            line.spans[0]
+                .style
+                .add_modifier
+                .contains(Modifier::BOLD)
+        );
+    }
+
+    #[test]
+    fn relay_token_renders_without_other_status_line_segments() {
+        let line = status_line_from_segments_with_relay_and_resolver(
+            Vec::<(StatusLineItem, String)>::new(),
+            /*use_theme_colors*/ false,
+            Some("ANVIL-0002"),
+            |_| None,
+        )
+        .expect("relay status line");
+
+        assert_eq!(line_text(&line), "ANVIL-0002");
     }
 
     #[test]
