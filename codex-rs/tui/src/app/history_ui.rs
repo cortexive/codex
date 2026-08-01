@@ -159,6 +159,7 @@ impl App {
     }
 
     pub(super) fn reset_app_ui_state_after_clear(&mut self) {
+        crate::cli::clear_relay_token();
         self.reset_transcript_state_after_clear();
     }
 
