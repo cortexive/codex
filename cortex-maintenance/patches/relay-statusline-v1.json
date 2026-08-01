@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "cortexive-codex-patch/v1",
+  "patchId": "relay-statusline-v1",
+  "state": "active",
+  "upstream": {
+    "repository": "openai/codex",
+    "baseTag": "rust-v0.146.0",
+    "baseCommit": "e363b08c9175ac1cbe5893615dd2cb9ddf95043b"
+  },
+  "overlay": {
+    "kind": "ordered-commits",
+    "sourceBaseCommit": "6751b54cae32b23786001e2414d749a9916201e1",
+    "commits": [
+      "f111d637f0e8589c20d22ffc9ae75d3051426a17"
+    ]
+  },
+  "expectedChangedFiles": [
+    "codex-rs/tui/src/bottom_pane/mod.rs",
+    "codex-rs/tui/src/bottom_pane/status_line_style.rs",
+    "codex-rs/tui/src/chatwidget/hook_lifecycle.rs",
+    "codex-rs/tui/src/chatwidget/status_surfaces.rs",
+    "codex-rs/tui/src/cortex_statusline.rs",
+    "codex-rs/tui/src/lib.rs"
+  ],
+  "requiredCapability": "trusted-external-dynamic-status-segment/v1",
+  "nativeRetirementMatrix": [
+    "external-dynamic-content",
+    "active-thread-identity",
+    "post-prompt-pre-model-refresh",
+    "independent-prefix-preserves-native-fields",
+    "visible-with-empty-native-selection",
+    "clear-successor-isolation",
+    "ordinary-prompt-continuity",
+    "valid-relay-hot-swap",
+    "malformed-correlation-preserves-prior-token",
+    "concurrent-session-isolation",
+    "no-relay-leakage"
+  ],
+  "commands": {
+    "format": "just fmt-check",
+    "focusedTests": "cargo test -p codex-tui --lib cortex_statusline -- --nocapture",
+    "check": "cargo check -p codex-tui -p codex-cli",
+    "clippy": "cargo clippy -p codex-tui -p codex-cli --tests -- -D warnings",
+    "build": "cargo build -p codex-cli --bin codex",
+    "changedAreaGate": "python3 .github/scripts/verify_tui_core_boundary.py",
+    "ttyCanary": "python3 .github/scripts/cortex_upstream_maintenance.py tty-canary"
+  },
+  "candidate": {
+    "identity": "rust-v0.146.0-relay-statusline-v1",
+    "versionId": "0.146.0+cortex.1",
+    "patchId": "relay-statusline-v1",
+    "source": {
+      "releaseId": 361463950,
+      "tag": "rust-v0.146.0",
+      "commit": "e363b08c9175ac1cbe5893615dd2cb9ddf95043b"
+    },
+    "branch": "cortexive/candidate/rust-v0.146.0-relay-statusline-v1",
+    "commit": "1e9b367ab98cd52c3bd73d941af5130fb61ae320",
+    "binary": {
+      "name": "codex",
+      "sha256": "798675790245bb322b7b2205c872ad233aec32ef3af7e7e2afa1d46a9acd3965"
+    },
+    "provenanceAsset": "provenance.json",
+    "validationReceipt": "commands.json",
+    "feedAsset": "candidate-feed.json",
+    "artifact": {
+      "kind": "draft-release",
+      "repository": "cortexive/codex",
+      "releaseId": 363589438,
+      "tag": "rust-v0.146.0-relay-statusline-v1",
+      "url": "https://github.com/cortexive/codex/releases/tag/untagged-867ec65a452a4f027e0b",
+      "retention": "draft-until-reviewed-or-replaced"
+    }
+  },
+  "promoted": null
+}
