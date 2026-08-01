@@ -9,7 +9,6 @@ mod relay_token;
 
 pub(crate) use relay_token::clear as clear_relay_token;
 pub(crate) use relay_token::current as cortex_relay_token;
-pub(crate) use relay_token::initial_thread_title_seed as relay_thread_title_seed;
 pub(crate) use relay_token::status_line_items as relay_status_line_items;
 pub(crate) use relay_token::update_from_prompt as update_relay_token_from_prompt;
 
