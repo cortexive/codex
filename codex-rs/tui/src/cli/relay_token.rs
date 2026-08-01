@@ -14,7 +14,10 @@ fn relay_token_state() -> &'static RwLock<Option<String>> {
 }
 
 pub(crate) fn current() -> Option<String> {
-    relay_token_state().read().ok()?.clone()
+    relay_token_state()
+        .read()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
 }
 
 pub(crate) fn initial_thread_title_seed() -> Option<String> {
@@ -74,14 +77,12 @@ fn extract_prompt_token(prompt: &str) -> Result<Option<String>, String> {
     if unique_tokens.len() != 1 {
         return Err("prompt contains conflicting RELAY_TOKEN values".to_string());
     }
-    let token = unique_tokens
-        .into_iter()
-        .next()
-        .expect("one unique relay token");
-    let token_root = token
-        .split_once('-')
-        .map(|(root, _)| root)
-        .expect("validated relay token has a root");
+    let Some(token) = unique_tokens.into_iter().next() else {
+        return Err("RELAY_TOKEN extraction failed".to_string());
+    };
+    let Some((token_root, _)) = token.split_once('-') else {
+        return Err(format!("invalid RELAY_TOKEN value; expected {RELAY_TOKEN_FORMAT}"));
+    };
 
     let unique_roots = roots.into_iter().collect::<BTreeSet<_>>();
     if unique_roots.len() > 1 {
