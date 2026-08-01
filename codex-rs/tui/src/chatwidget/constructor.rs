@@ -35,6 +35,11 @@ impl ChatWidget {
         let model = model.filter(|m| !m.trim().is_empty());
         let mut config = config;
         config.model = model.clone();
+        config.tui_status_line = crate::cli::relay_status_line_items(
+            config.tui_status_line.take(),
+            &DEFAULT_STATUS_LINE_ITEMS,
+        );
+        let relay_thread_name = crate::cli::relay_thread_name(/*thread_name*/ None);
         let prevent_idle_sleep = config.features.enabled(Feature::PreventIdleSleep);
         let mut rng = rand::rng();
         let placeholder = PLACEHOLDERS[rng.random_range(0..PLACEHOLDERS.len())].to_string();
@@ -200,7 +205,7 @@ impl ChatWidget {
             pet_image_support_override: None,
             thread_id: None,
             dismissed_plan_mode_nudge_scopes: HashSet::new(),
-            thread_name: None,
+            thread_name: relay_thread_name,
             thread_rename_block_message: None,
             active_side_conversation: false,
             blocks_direct_input: false,
