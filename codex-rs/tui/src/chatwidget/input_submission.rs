@@ -138,8 +138,8 @@ impl ChatWidget {
             return (false, None);
         }
 
-        let is_shell_escape = shell_escape_policy == ShellEscapePolicy::Allow
-            && user_message.text.starts_with('!');
+        let is_shell_escape =
+            shell_escape_policy == ShellEscapePolicy::Allow && user_message.text.starts_with('!');
         if !is_shell_escape {
             match crate::cli::update_relay_token_from_prompt(&user_message.text) {
                 Ok(true) => {
