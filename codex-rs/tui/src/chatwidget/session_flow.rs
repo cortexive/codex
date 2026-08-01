@@ -25,8 +25,9 @@ impl ChatWidget {
                 display,
                 SessionConfiguredDisplay::Normal | SessionConfiguredDisplay::PromptEdit
             )
+            && let Some(original_status_line) = crate::cli::clear_relay_token()
         {
-            crate::cli::clear_relay_token();
+            self.config.tui_status_line = original_status_line;
         }
         self.bottom_pane
             .set_queue_submissions(/*queue_submissions*/ false);
