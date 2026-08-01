@@ -141,9 +141,14 @@ impl ChatWidget {
         let is_shell_escape =
             shell_escape_policy == ShellEscapePolicy::Allow && user_message.text.starts_with('!');
         if !is_shell_escape {
-            match crate::cli::update_relay_token_from_prompt(&user_message.text) {
+            let relay_thread_key = self.thread_id.map(|thread_id| thread_id.to_string());
+            match crate::cli::update_relay_token_from_prompt(
+                relay_thread_key.as_deref(),
+                &user_message.text,
+            ) {
                 Ok(true) => {
                     self.config.tui_status_line = crate::cli::relay_status_line_items(
+                        relay_thread_key.as_deref(),
                         self.config.tui_status_line.take(),
                         &DEFAULT_STATUS_LINE_ITEMS,
                     );
