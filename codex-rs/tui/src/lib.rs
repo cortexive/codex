@@ -107,6 +107,7 @@ mod clipboard_paste;
 mod collaboration_modes;
 mod color;
 mod config_update;
+mod cortex_statusline;
 pub(crate) mod custom_terminal;
 mod pets;
 pub use custom_terminal::Terminal;

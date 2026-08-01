@@ -80,6 +80,7 @@ pub(crate) use mcp_server_elicitation::McpServerElicitationFormRequest;
 pub(crate) use mcp_server_elicitation::McpServerElicitationOverlay;
 pub(crate) use request_user_input::RequestUserInputOverlay;
 pub(crate) use status_line_style::status_line_from_segments;
+pub(crate) use status_line_style::status_line_from_segments_with_prefix;
 mod bottom_pane_view;
 mod effort_ignition;
 

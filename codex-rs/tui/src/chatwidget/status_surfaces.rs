@@ -4,7 +4,7 @@
 //! behavior easier to review without paging through the rest of `chatwidget.rs`.
 
 use super::*;
-use crate::bottom_pane::status_line_from_segments;
+use crate::bottom_pane::status_line_from_segments_with_prefix;
 use crate::branch_summary;
 use crate::chatwidget::limit_label_for_window;
 use crate::chatwidget::rate_limits::get_limits_duration;
@@ -175,7 +175,12 @@ impl ChatWidget {
     }
 
     fn refresh_status_line_from_selections(&mut self, selections: &StatusSurfaceSelections) {
-        let enabled = !selections.status_line_items.is_empty();
+        let relay_token = self
+            .thread_id
+            .map(|thread_id| thread_id.to_string())
+            .and_then(|thread_id| crate::cortex_statusline::relay_token_for_session(&thread_id));
+        let has_relay_token = relay_token.is_some();
+        let enabled = has_relay_token || !selections.status_line_items.is_empty();
         self.bottom_pane.set_status_line_enabled(enabled);
         if !enabled {
             self.set_status_line(/*status_line*/ None);
@@ -190,7 +195,8 @@ impl ChatWidget {
             }
         }
 
-        self.set_status_line(status_line_from_segments(
+        self.set_status_line(status_line_from_segments_with_prefix(
+            relay_token,
             segments,
             self.config.tui_status_line_use_colors,
         ));
