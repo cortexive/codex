@@ -88,6 +88,18 @@ fn marker_text_inside_a_larger_identifier_is_ignored() {
 }
 
 #[test]
+#[serial_test::serial]
+fn prompt_binding_hot_swaps_and_clear_resets_the_process_token() {
+    clear();
+    assert!(update_from_prompt("RELAY_TOKEN: ANVIL-0001").expect("bind token"));
+    assert_eq!(current(), Some("ANVIL-0001".to_string()));
+    assert!(update_from_prompt("RELAY_TOKEN: ANVIL-0002").expect("replace token"));
+    assert_eq!(current(), Some("ANVIL-0002".to_string()));
+    clear();
+    assert_eq!(current(), None);
+}
+
+#[test]
 fn relay_status_line_keeps_the_token_slot_first_and_deduplicated() {
     let items = prepend_thread_title(
         Some(vec![
