@@ -30,10 +30,7 @@ pub(crate) fn parse_cortex_relay_message(text: &str) -> Option<CortexRelayUpdate
     is_valid_token(value).then(|| CortexRelayUpdate::Set(value.to_string()))
 }
 
-pub(crate) fn set_cortex_relay_token(
-    token: String,
-    restore_explicit_empty_status_line: bool,
-) {
+pub(crate) fn set_cortex_relay_token(token: String, restore_explicit_empty_status_line: bool) {
     if !is_valid_token(&token) {
         return;
     }
