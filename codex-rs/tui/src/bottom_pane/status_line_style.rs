@@ -284,12 +284,7 @@ mod tests {
         .expect("status line");
 
         assert_eq!(line_text(&line), "ANVIL-0002 · /repo");
-        assert!(
-            line.spans[0]
-                .style
-                .add_modifier
-                .contains(Modifier::BOLD)
-        );
+        assert!(line.spans[0].style.add_modifier.contains(Modifier::BOLD));
     }
 
     #[test]
