@@ -5,6 +5,12 @@ use codex_utils_cli::ApprovalModeCliArg;
 use codex_utils_cli::CliConfigOverrides;
 use codex_utils_cli::SharedCliOptions;
 
+mod relay_token;
+
+pub(crate) use relay_token::current as cortex_relay_token;
+pub(crate) use relay_token::display_thread_name as relay_thread_name;
+pub(crate) use relay_token::status_line_items as relay_status_line_items;
+
 #[derive(Parser, Clone, Debug)]
 #[command(version)]
 pub struct Cli {
@@ -70,6 +76,16 @@ pub struct Cli {
     /// Runs the TUI in inline mode, preserving terminal scrollback history.
     #[arg(long = "no-alt-screen", default_value_t = false)]
     pub no_alt_screen: bool,
+
+    /// Internal launcher-owned correlation displayed in the TUI footer.
+    #[arg(
+        long = "cortex-relay-token",
+        value_name = "TOKEN",
+        hide = true,
+        value_parser = relay_token::parse_and_bind
+    )]
+    #[allow(dead_code)]
+    pub(crate) cortex_relay_token: Option<String>,
 
     #[clap(skip)]
     pub config_overrides: CliConfigOverrides,
