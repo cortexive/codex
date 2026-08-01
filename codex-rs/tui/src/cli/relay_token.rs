@@ -30,8 +30,8 @@ pub(crate) fn current() -> Option<&'static str> {
     RELAY_TOKEN.get().map(String::as_str)
 }
 
-pub(crate) fn display_thread_name(thread_name: Option<String>) -> Option<String> {
-    current().map(str::to_string).or(thread_name)
+pub(crate) fn initial_thread_title_seed() -> Option<String> {
+    current().map(str::to_string)
 }
 
 pub(crate) fn status_line_items(
