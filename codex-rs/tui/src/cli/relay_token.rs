@@ -7,36 +7,51 @@ const RELAY_TOKEN_MARKER: &str = "RELAY_TOKEN:";
 const RELAY_TOKEN_FORMAT: &str = "^[A-Z]{4,16}-[0-9]{4}$";
 const THREAD_TITLE_STATUS_ITEM: &str = "thread-title";
 
-static RELAY_TOKEN: OnceLock<RwLock<Option<String>>> = OnceLock::new();
+#[derive(Default)]
+struct RelayTokenState {
+    token: Option<String>,
+    original_status_line: Option<Option<Vec<String>>>,
+}
 
-fn relay_token_state() -> &'static RwLock<Option<String>> {
-    RELAY_TOKEN.get_or_init(|| RwLock::new(None))
+static RELAY_TOKEN_STATE: OnceLock<RwLock<RelayTokenState>> = OnceLock::new();
+
+fn relay_token_state() -> &'static RwLock<RelayTokenState> {
+    RELAY_TOKEN_STATE.get_or_init(|| RwLock::new(RelayTokenState::default()))
 }
 
 pub(crate) fn current() -> Option<String> {
     relay_token_state()
         .read()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .token
         .clone()
 }
 
-pub(crate) fn clear() {
-    *relay_token_state()
+pub(crate) fn clear() -> Option<Option<Vec<String>>> {
+    let mut state = relay_token_state()
         .write()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    state.token = None;
+    state.original_status_line.take()
 }
 
-pub(crate) fn update_from_prompt(prompt: &str) -> Result<bool, String> {
+pub(crate) fn update_from_prompt(
+    prompt: &str,
+    current_status_line: &Option<Vec<String>>,
+) -> Result<bool, String> {
     let Some(token) = extract_prompt_token(prompt)? else {
         return Ok(false);
     };
-    let mut current = relay_token_state()
+    let mut state = relay_token_state()
         .write()
         .map_err(|_| "Cortex relay-token state is unavailable".to_string())?;
-    if current.as_deref() == Some(token.as_str()) {
+    if state.token.as_deref() == Some(token.as_str()) {
         return Ok(false);
     }
-    *current = Some(token);
+    if state.token.is_none() {
+        state.original_status_line = Some(current_status_line.clone());
+    }
+    state.token = Some(token);
     Ok(true)
 }
 
@@ -48,6 +63,20 @@ pub(crate) fn status_line_items(
         return configured;
     }
 
+    Some(prepend_thread_title(configured, default_items))
+}
+
+pub(crate) fn apply_user_status_line_items(
+    configured: Option<Vec<String>>,
+    default_items: &[&str],
+) -> Option<Vec<String>> {
+    let mut state = relay_token_state()
+        .write()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if state.token.is_none() {
+        return configured;
+    }
+    state.original_status_line = Some(configured.clone());
     Some(prepend_thread_title(configured, default_items))
 }
 
