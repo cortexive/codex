@@ -91,14 +91,47 @@ fn marker_text_inside_a_larger_identifier_is_ignored() {
 
 #[test]
 #[serial_test::serial]
-fn prompt_binding_hot_swaps_and_clear_resets_the_process_token() {
+fn prompt_binding_hot_swaps_and_restores_the_original_status_line() {
     clear();
     assert!(update_from_prompt("RELAY_TOKEN: ANVIL-0001").expect("bind token"));
     assert_eq!(current(), Some("ANVIL-0001".to_string()));
+    assert_eq!(
+        status_line_items(None, &["model-with-reasoning", "current-dir"]),
+        Some(vec![
+            "thread-title".to_string(),
+            "model-with-reasoning".to_string(),
+            "current-dir".to_string(),
+        ])
+    );
     assert!(update_from_prompt("RELAY_TOKEN: ANVIL-0002").expect("replace token"));
     assert_eq!(current(), Some("ANVIL-0002".to_string()));
-    clear();
+    assert_eq!(clear(), Some(None));
     assert_eq!(current(), None);
+}
+
+#[test]
+#[serial_test::serial]
+fn status_line_edits_remain_user_owned_during_relay_projection() {
+    clear();
+    assert!(update_from_prompt("RELAY_TOKEN: ANVIL-0001").expect("bind token"));
+    assert_eq!(
+        status_line_items(Some(Vec::new()), &["model-with-reasoning", "current-dir"]),
+        Some(vec!["thread-title".to_string()])
+    );
+    assert_eq!(
+        apply_user_status_line_items(
+            Some(vec!["current-dir".to_string()]),
+            &["model-with-reasoning", "current-dir"],
+        ),
+        Some(vec![
+            "thread-title".to_string(),
+            "current-dir".to_string(),
+        ])
+    );
+    assert_eq!(
+        clear(),
+        Some(Some(vec!["current-dir".to_string()]))
+    );
 }
 
 #[test]
