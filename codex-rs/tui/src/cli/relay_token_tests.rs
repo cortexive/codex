@@ -123,15 +123,9 @@ fn status_line_edits_remain_user_owned_during_relay_projection() {
             Some(vec!["current-dir".to_string()]),
             &["model-with-reasoning", "current-dir"],
         ),
-        Some(vec![
-            "thread-title".to_string(),
-            "current-dir".to_string(),
-        ])
+        Some(vec!["thread-title".to_string(), "current-dir".to_string(),])
     );
-    assert_eq!(
-        clear(),
-        Some(Some(vec!["current-dir".to_string()]))
-    );
+    assert_eq!(clear(), Some(Some(vec!["current-dir".to_string()])));
 }
 
 #[test]
