@@ -117,10 +117,23 @@ where
         } else {
             style
         };
+        let text = relay_footer_text(item, text, crate::cli::cortex_relay_token());
         spans.push(Span::styled(text, style));
     }
 
     (!spans.is_empty()).then(|| Line::from(spans))
+}
+
+fn relay_footer_text(
+    item: StatusLineItem,
+    text: String,
+    relay_token: Option<&str>,
+) -> String {
+    if item == StatusLineItem::ThreadTitle {
+        relay_token.map_or(text, str::to_string)
+    } else {
+        text
+    }
 }
 
 fn soften_status_line_style(mut style: Style) -> Style {
@@ -179,6 +192,7 @@ fn soften_rgb_channel(channel: u8, luma: u16) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use insta::assert_snapshot;
     use pretty_assertions::assert_eq;
     use ratatui::style::Modifier;
 
@@ -209,6 +223,34 @@ mod tests {
         assert!(!line.spans[2].style.add_modifier.contains(Modifier::DIM));
         assert_eq!(line.spans[4].style.fg, Some(Color::Magenta));
         assert!(!line.spans[4].style.add_modifier.contains(Modifier::DIM));
+    }
+
+    #[test]
+    fn relay_token_replaces_only_the_footer_thread_title() {
+        assert_eq!(
+            relay_footer_text(
+                StatusLineItem::ThreadTitle,
+                "persisted thread name".to_string(),
+                Some("ANVIL-0001"),
+            ),
+            "ANVIL-0001"
+        );
+        assert_eq!(
+            relay_footer_text(
+                StatusLineItem::CurrentDir,
+                "/repo".to_string(),
+                Some("ANVIL-0001"),
+            ),
+            "/repo"
+        );
+        assert_snapshot!(
+            relay_footer_text(
+                StatusLineItem::ThreadTitle,
+                "persisted thread name".to_string(),
+                Some("ANVIL-0001"),
+            ),
+            @"ANVIL-0001"
+        );
     }
 
     #[test]
