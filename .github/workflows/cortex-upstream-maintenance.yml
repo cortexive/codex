@@ -1,0 +1,240 @@
+name: Cortex upstream maintenance
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Exact stable rust-v<version> tag; blank selects latest
+        required: false
+        type: string
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+
+concurrency:
+  group: cortex-upstream-maintenance-${{ inputs.tag || 'latest-stable' }}
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    name: Deterministic candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      DRIVER: .github/scripts/cortex_upstream_maintenance.py
+      MANIFEST: cortex-maintenance/patches/relay-statusline-v1.json
+      PATCH_ID: relay-statusline-v1
+      OVERLAY_COMMIT: f111d637f0e8589c20d22ffc9ae75d3051426a17
+      OVERLAY_BRANCH: agent/relay-token-statusline-tm-435
+    steps:
+      - name: Checkout management branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-ci
+
+      - name: Validate patch registry
+        run: python3 "$DRIVER" validate-manifest --manifest "$MANIFEST"
+
+      - name: Resolve immutable stable release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp 'repos/openai/codex/releases?per_page=100' \
+            | jq 'add' > "$RUNNER_TEMP/releases.json"
+          if [[ -n "$REQUESTED_TAG" ]]; then
+            python3 - "$RUNNER_TEMP/releases.json" "$REQUESTED_TAG" "$RUNNER_TEMP/release.json" <<'PY'
+          import json, sys
+          releases = json.load(open(sys.argv[1], encoding="utf-8"))
+          matches = [r for r in releases if r.get("tag_name") == sys.argv[2] and r.get("draft") is False and r.get("prerelease") is False]
+          if len(matches) != 1:
+              raise SystemExit("requested tag is not one unique stable release")
+          json.dump({"release_id": matches[0]["id"], "tag": matches[0]["tag_name"]}, open(sys.argv[3], "w", encoding="utf-8"))
+          PY
+          else
+            python3 "$DRIVER" select-release \
+              --input "$RUNNER_TEMP/releases.json" \
+              --output "$RUNNER_TEMP/release.json"
+          fi
+          TAG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tag"])' "$RUNNER_TEMP/release.json")"
+          RELEASE_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["release_id"])' "$RUNNER_TEMP/release.json")"
+          git remote add upstream https://github.com/openai/codex.git
+          git fetch --force upstream "refs/tags/$TAG:refs/tags/$TAG"
+          COMMIT="$(git rev-parse --verify "refs/tags/$TAG^{commit}")"
+          python3 "$DRIVER" verify-binding --repo . --tag "$TAG" --commit "$COMMIT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "branch=cortexive/candidate/$TAG-$PATCH_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Construct deterministic overlay candidate
+        id: construct
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          SOURCE_COMMIT: ${{ steps.release.outputs.commit }}
+          CANDIDATE_BRANCH: ${{ steps.release.outputs.branch }}
+        run: |
+          set -euo pipefail
+          SOURCE_ROOT="$PWD"
+          CANDIDATE_ROOT="$RUNNER_TEMP/candidate"
+          git fetch origin "refs/heads/$OVERLAY_BRANCH:refs/remotes/origin/$OVERLAY_BRANCH"
+          test "$(git rev-parse "refs/remotes/origin/$OVERLAY_BRANCH")" = "$OVERLAY_COMMIT"
+          git worktree add --detach "$CANDIDATE_ROOT" "$SOURCE_COMMIT"
+          git -C "$CANDIDATE_ROOT" config user.name cortex-upstream-maintenance
+          git -C "$CANDIDATE_ROOT" config user.email actions@users.noreply.github.com
+          COMMITTER_DATE="$(git show -s --format=%cI "$OVERLAY_COMMIT")"
+          GIT_COMMITTER_DATE="$COMMITTER_DATE" git -C "$CANDIDATE_ROOT" cherry-pick "$OVERLAY_COMMIT"
+          CANDIDATE_COMMIT="$(git -C "$CANDIDATE_ROOT" rev-parse HEAD)"
+          python3 "$DRIVER" check-bounds \
+            --repo "$CANDIDATE_ROOT" \
+            --base "$SOURCE_COMMIT" \
+            --head "$CANDIDATE_COMMIT" \
+            --manifest "$MANIFEST"
+          git -C "$CANDIDATE_ROOT" branch -f "$CANDIDATE_BRANCH" "$CANDIDATE_COMMIT"
+          echo "root=$CANDIDATE_ROOT" >> "$GITHUB_OUTPUT"
+          echo "commit=$CANDIDATE_COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Run compiled native-retirement probe
+        id: native_probe
+        env:
+          SOURCE_COMMIT: ${{ steps.release.outputs.commit }}
+        run: |
+          set -euo pipefail
+          SIGNAL=false
+          if git diff --name-only 6751b54cae32b23786001e2414d749a9916201e1 "$SOURCE_COMMIT" -- \
+            codex-rs/tui codex-rs/config codex-rs/hooks codex-rs/protocol | grep -q .; then
+            SIGNAL=true
+          fi
+          set +e
+          python3 "$DRIVER" semantic-parity \
+            --source cortex-maintenance/native_interface_probe.rs \
+            --fixture native-fail
+          PARITY_EXIT=$?
+          set -e
+          RESULT=active
+          if [[ "$SIGNAL" == true ]]; then
+            RESULT=migration-candidate
+          fi
+          if [[ $PARITY_EXIT -eq 0 && "$SIGNAL" == true ]]; then
+            RESULT=retired
+          fi
+          test "$RESULT" != retired
+          echo "signal=$SIGNAL" >> "$GITHUB_OUTPUT"
+          echo "result=$RESULT" >> "$GITHUB_OUTPUT"
+
+      - name: Run source, build, and TTY gates
+        env:
+          CANDIDATE_ROOT: ${{ steps.construct.outputs.root }}
+        run: |
+          set -euo pipefail
+          python3 "$DRIVER" run-gates \
+            --root "$CANDIDATE_ROOT" \
+            --manifest "$MANIFEST" \
+            --output "$RUNNER_TEMP/commands.json"
+
+      - name: Publish candidate branch with compare-and-swap protection
+        env:
+          CANDIDATE_ROOT: ${{ steps.construct.outputs.root }}
+          CANDIDATE_BRANCH: ${{ steps.release.outputs.branch }}
+          CANDIDATE_COMMIT: ${{ steps.construct.outputs.commit }}
+        run: |
+          set -euo pipefail
+          REMOTE="$(git ls-remote --heads origin "refs/heads/$CANDIDATE_BRANCH" | cut -f1)"
+          if [[ "$REMOTE" == "$CANDIDATE_COMMIT" ]]; then
+            echo "candidate branch already exact"
+          elif [[ -n "$REMOTE" ]]; then
+            git -C "$CANDIDATE_ROOT" push origin \
+              "$CANDIDATE_COMMIT:refs/heads/$CANDIDATE_BRANCH" \
+              "--force-with-lease=refs/heads/$CANDIDATE_BRANCH:$REMOTE"
+          else
+            git -C "$CANDIDATE_ROOT" push origin \
+              "$CANDIDATE_COMMIT:refs/heads/$CANDIDATE_BRANCH" \
+              "--force-with-lease=refs/heads/$CANDIDATE_BRANCH:"
+          fi
+
+      - name: Produce hash-bound provenance
+        id: provenance
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+          TAG: ${{ steps.release.outputs.tag }}
+          SOURCE_COMMIT: ${{ steps.release.outputs.commit }}
+          CANDIDATE_BRANCH: ${{ steps.release.outputs.branch }}
+          CANDIDATE_COMMIT: ${{ steps.construct.outputs.commit }}
+          CANDIDATE_ROOT: ${{ steps.construct.outputs.root }}
+          RETIREMENT_SIGNAL: ${{ steps.native_probe.outputs.signal }}
+          RETIREMENT_RESULT: ${{ steps.native_probe.outputs.result }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/candidate-artifact"
+          cp "$CANDIDATE_ROOT/codex-rs/target/debug/codex" "$RUNNER_TEMP/candidate-artifact/codex"
+          TOOLCHAIN="$(rustc --version); $(cargo --version)"
+          python3 "$DRIVER" provenance \
+            --release-id "$RELEASE_ID" \
+            --tag "$TAG" \
+            --commit "$SOURCE_COMMIT" \
+            --manifest "$MANIFEST" \
+            --candidate-branch "$CANDIDATE_BRANCH" \
+            --candidate-commit "$CANDIDATE_COMMIT" \
+            --binary "$RUNNER_TEMP/candidate-artifact/codex" \
+            --commands "$RUNNER_TEMP/commands.json" \
+            --retirement-signal "$RETIREMENT_SIGNAL" \
+            --retirement-result "$RETIREMENT_RESULT" \
+            --toolchain "$TOOLCHAIN" \
+            --output "$RUNNER_TEMP/candidate-artifact/provenance.json"
+          python3 "$DRIVER" candidate-feed \
+            --provenance "$RUNNER_TEMP/candidate-artifact/provenance.json" \
+            --output "$RUNNER_TEMP/candidate-artifact/candidate-feed.json"
+          cp "$RUNNER_TEMP/commands.json" "$RUNNER_TEMP/candidate-artifact/commands.json"
+          cp "$MANIFEST" "$RUNNER_TEMP/candidate-artifact/patch-manifest.json"
+          echo "artifact=cortex-codex-${TAG}-${CANDIDATE_COMMIT}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload immutable candidate artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: ${{ steps.provenance.outputs.artifact }}
+          path: ${{ runner.temp }}/candidate-artifact
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Update the single maintenance tracker
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          SOURCE_COMMIT: ${{ steps.release.outputs.commit }}
+          CANDIDATE_COMMIT: ${{ steps.construct.outputs.commit }}
+          ARTIFACT: ${{ steps.provenance.outputs.artifact }}
+        run: |
+          set -euo pipefail
+          TITLE="Cortex upstream maintenance tracker"
+          NUMBER="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$TITLE in:title" --json number,title --jq ".[] | select(.title == \"$TITLE\") | .number" | head -1)"
+          BODY="candidate ready: $TAG@$SOURCE_COMMIT; overlay candidate $CANDIDATE_COMMIT; artifact $ARTIFACT; run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID; promotion disabled"
+          if [[ -n "$NUMBER" ]]; then
+            gh issue comment "$NUMBER" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+          fi
+
+      - name: Record one exceptional-maintenance ticket on failure
+        if: failure() && !cancelled()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag || 'unresolved' }}
+          SOURCE_COMMIT: ${{ steps.release.outputs.commit || 'unresolved' }}
+        run: |
+          set -euo pipefail
+          TITLE="Codex exceptional maintenance: $TAG/$PATCH_ID"
+          NUMBER="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$TITLE in:title" --json number,title --jq ".[] | select(.title == \"$TITLE\") | .number" | head -1)"
+          BODY="immutable source: $TAG@$SOURCE_COMMIT; overlay: $OVERLAY_COMMIT; failed run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID; candidate was not promoted"
+          if [[ -n "$NUMBER" ]]; then
+            gh issue comment "$NUMBER" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+          fi
