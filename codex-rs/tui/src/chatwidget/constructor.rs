@@ -39,7 +39,7 @@ impl ChatWidget {
             config.tui_status_line.take(),
             &DEFAULT_STATUS_LINE_ITEMS,
         );
-        let relay_thread_name = crate::cli::relay_thread_name(/*thread_name*/ None);
+        let relay_thread_name = crate::cli::relay_thread_title_seed();
         let prevent_idle_sleep = config.features.enabled(Feature::PreventIdleSleep);
         let mut rng = rand::rng();
         let placeholder = PLACEHOLDERS[rng.random_range(0..PLACEHOLDERS.len())].to_string();
