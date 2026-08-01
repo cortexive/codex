@@ -87,7 +87,9 @@ fn extract_prompt_token(prompt: &str) -> Result<Option<String>, String> {
         return Err("RELAY_TOKEN extraction failed".to_string());
     };
     let Some((token_root, _)) = token.split_once('-') else {
-        return Err(format!("invalid RELAY_TOKEN value; expected {RELAY_TOKEN_FORMAT}"));
+        return Err(format!(
+            "invalid RELAY_TOKEN value; expected {RELAY_TOKEN_FORMAT}"
+        ));
     };
 
     let unique_roots = roots.into_iter().collect::<BTreeSet<_>>();
@@ -156,8 +158,7 @@ fn marker_values(
 }
 
 fn is_valid_root(value: &str) -> bool {
-    (4..=16).contains(&value.len())
-        && value.bytes().all(|byte| byte.is_ascii_uppercase())
+    (4..=16).contains(&value.len()) && value.bytes().all(|byte| byte.is_ascii_uppercase())
 }
 
 fn is_valid_token(value: &str) -> bool {
@@ -165,9 +166,7 @@ fn is_valid_token(value: &str) -> bool {
         return false;
     };
 
-    is_valid_root(root)
-        && sequence.len() == 4
-        && sequence.bytes().all(|byte| byte.is_ascii_digit())
+    is_valid_root(root) && sequence.len() == 4 && sequence.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 #[cfg(test)]
