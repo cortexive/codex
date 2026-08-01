@@ -35,10 +35,7 @@ pub(crate) fn clear() -> Option<Option<Vec<String>>> {
     state.original_status_line.take()
 }
 
-pub(crate) fn update_from_prompt(
-    prompt: &str,
-    current_status_line: &Option<Vec<String>>,
-) -> Result<bool, String> {
+pub(crate) fn update_from_prompt(prompt: &str) -> Result<bool, String> {
     let Some(token) = extract_prompt_token(prompt)? else {
         return Ok(false);
     };
@@ -48,9 +45,6 @@ pub(crate) fn update_from_prompt(
     if state.token.as_deref() == Some(token.as_str()) {
         return Ok(false);
     }
-    if state.token.is_none() {
-        state.original_status_line = Some(current_status_line.clone());
-    }
     state.token = Some(token);
     Ok(true)
 }
@@ -59,10 +53,15 @@ pub(crate) fn status_line_items(
     configured: Option<Vec<String>>,
     default_items: &[&str],
 ) -> Option<Vec<String>> {
-    if current().is_none() {
+    let mut state = relay_token_state()
+        .write()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if state.token.is_none() {
         return configured;
     }
-
+    if state.original_status_line.is_none() {
+        state.original_status_line = Some(configured.clone());
+    }
     Some(prepend_thread_title(configured, default_items))
 }
 
