@@ -19,13 +19,15 @@ impl ChatWidget {
         self.set_skills(/*skills*/ None);
         self.session_network_proxy = session.network_proxy.clone();
         let previous_thread_id = self.thread_id;
+        let previous_thread_key = previous_thread_id.map(|thread_id| thread_id.to_string());
         self.thread_id = Some(session.thread_id);
         if previous_thread_id != self.thread_id
             && matches!(
                 display,
                 SessionConfiguredDisplay::Normal | SessionConfiguredDisplay::PromptEdit
             )
-            && let Some(original_status_line) = crate::cli::clear_relay_token()
+            && let Some(original_status_line) =
+                crate::cli::clear_relay_token(previous_thread_key.as_deref())
         {
             self.config.tui_status_line = original_status_line;
         }
