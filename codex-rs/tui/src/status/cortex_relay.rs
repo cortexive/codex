@@ -71,6 +71,9 @@ fn is_valid_token(value: &str) -> bool {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+    use std::sync::Mutex;
+
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn parses_only_the_reserved_clear_or_canonical_token_messages() {
@@ -91,6 +94,7 @@ mod tests {
 
     #[test]
     fn clear_returns_whether_an_explicit_empty_status_line_must_be_restored() {
+        let _guard = TEST_LOCK.lock().expect("test lock");
         clear_cortex_relay_token();
         set_cortex_relay_token("ANVIL-0002".to_string(), true);
         assert_eq!(cortex_relay_token().as_deref(), Some("ANVIL-0002"));
@@ -100,6 +104,7 @@ mod tests {
 
     #[test]
     fn later_tokens_replace_the_projection_without_losing_restore_state() {
+        let _guard = TEST_LOCK.lock().expect("test lock");
         clear_cortex_relay_token();
         set_cortex_relay_token("ANVIL-0002".to_string(), true);
         set_cortex_relay_token("ANVIL-0003".to_string(), false);
