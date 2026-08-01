@@ -26,10 +26,6 @@ pub(crate) fn clear() {
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
 }
 
-pub(crate) fn initial_thread_title_seed() -> Option<String> {
-    None
-}
-
 pub(crate) fn update_from_prompt(prompt: &str) -> Result<bool, String> {
     let Some(token) = extract_prompt_token(prompt)? else {
         return Ok(false);
