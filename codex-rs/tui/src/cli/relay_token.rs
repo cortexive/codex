@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::sync::RwLock;
 
@@ -13,35 +14,44 @@ struct RelayTokenState {
     original_status_line: Option<Option<Vec<String>>>,
 }
 
-static RELAY_TOKEN_STATE: OnceLock<RwLock<RelayTokenState>> = OnceLock::new();
+static RELAY_TOKEN_STATES: OnceLock<RwLock<HashMap<String, RelayTokenState>>> = OnceLock::new();
 
-fn relay_token_state() -> &'static RwLock<RelayTokenState> {
-    RELAY_TOKEN_STATE.get_or_init(|| RwLock::new(RelayTokenState::default()))
+fn relay_token_states() -> &'static RwLock<HashMap<String, RelayTokenState>> {
+    RELAY_TOKEN_STATES.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-pub(crate) fn current() -> Option<String> {
-    relay_token_state()
+pub(crate) fn current(thread_key: Option<&str>) -> Option<String> {
+    let thread_key = thread_key?;
+    relay_token_states()
         .read()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .token
-        .clone()
+        .get(thread_key)
+        .and_then(|state| state.token.clone())
 }
 
-pub(crate) fn clear() -> Option<Option<Vec<String>>> {
-    let mut state = relay_token_state()
+pub(crate) fn clear(thread_key: Option<&str>) -> Option<Option<Vec<String>>> {
+    let thread_key = thread_key?;
+    relay_token_states()
         .write()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    state.token = None;
-    state.original_status_line.take()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(thread_key)
+        .and_then(|state| state.original_status_line)
 }
 
-pub(crate) fn update_from_prompt(prompt: &str) -> Result<bool, String> {
+pub(crate) fn update_from_prompt(
+    thread_key: Option<&str>,
+    prompt: &str,
+) -> Result<bool, String> {
     let Some(token) = extract_prompt_token(prompt)? else {
         return Ok(false);
     };
-    let mut state = relay_token_state()
+    let thread_key = thread_key.ok_or_else(|| {
+        "cannot bind a Cortex relay token before the Codex thread is configured".to_string()
+    })?;
+    let mut states = relay_token_states()
         .write()
         .map_err(|_| "Cortex relay-token state is unavailable".to_string())?;
+    let state = states.entry(thread_key.to_string()).or_default();
     if state.token.as_deref() == Some(token.as_str()) {
         return Ok(false);
     }
@@ -50,12 +60,19 @@ pub(crate) fn update_from_prompt(prompt: &str) -> Result<bool, String> {
 }
 
 pub(crate) fn status_line_items(
+    thread_key: Option<&str>,
     configured: Option<Vec<String>>,
     default_items: &[&str],
 ) -> Option<Vec<String>> {
-    let mut state = relay_token_state()
+    let Some(thread_key) = thread_key else {
+        return configured;
+    };
+    let mut states = relay_token_states()
         .write()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let Some(state) = states.get_mut(thread_key) else {
+        return configured;
+    };
     if state.token.is_none() {
         return configured;
     }
@@ -66,12 +83,19 @@ pub(crate) fn status_line_items(
 }
 
 pub(crate) fn apply_user_status_line_items(
+    thread_key: Option<&str>,
     configured: Option<Vec<String>>,
     default_items: &[&str],
 ) -> Option<Vec<String>> {
-    let mut state = relay_token_state()
+    let Some(thread_key) = thread_key else {
+        return configured;
+    };
+    let mut states = relay_token_states()
         .write()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let Some(state) = states.get_mut(thread_key) else {
+        return configured;
+    };
     if state.token.is_none() {
         return configured;
     }
