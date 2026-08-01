@@ -45,10 +45,7 @@ pub(crate) fn status_line_items(
     Some(prepend_thread_title(configured, default_items))
 }
 
-fn prepend_thread_title(
-    configured: Option<Vec<String>>,
-    default_items: &[&str],
-) -> Vec<String> {
+fn prepend_thread_title(configured: Option<Vec<String>>, default_items: &[&str]) -> Vec<String> {
     let mut items = configured.unwrap_or_else(|| {
         default_items
             .iter()
