@@ -5,7 +5,7 @@ use pretty_assertions::assert_eq;
 #[test]
 fn accepts_sequential_decimal_tokens() {
     for token in ["ANVL-0001", "ANVIL-0042", "ABCDEFGHIJKLMNOP-9999"] {
-        assert!(is_valid(token), "expected valid token: {token}");
+        assert!(is_valid_token(token), "expected valid token: {token}");
     }
 }
 
@@ -24,8 +24,67 @@ fn rejects_noncanonical_tokens() {
         " ANVIL-0001",
         "ANVIL-0001 ",
     ] {
-        assert!(!is_valid(token), "expected invalid token: {token}");
+        assert!(!is_valid_token(token), "expected invalid token: {token}");
     }
+}
+
+#[test]
+fn extracts_token_from_the_actual_compact_relay_prompt_shape() {
+    let prompt = "Before review, verify `RELAY_ROOT: HELIOS`, `RELAY_TOKEN: HELIOS-0009`, and the frozen head.";
+
+    assert_eq!(
+        extract_prompt_token(prompt),
+        Ok(Some("HELIOS-0009".to_string()))
+    );
+}
+
+#[test]
+fn accepts_repeated_identical_token_mentions() {
+    let prompt = "RELAY_ROOT: HELIOS\nRELAY_TOKEN: HELIOS-0009\nFinal line: RELAY_TOKEN: HELIOS-0009";
+
+    assert_eq!(
+        extract_prompt_token(prompt),
+        Ok(Some("HELIOS-0009".to_string()))
+    );
+}
+
+#[test]
+fn leaves_ordinary_prompts_unbound() {
+    assert_eq!(extract_prompt_token("Review this pull request."), Ok(None));
+}
+
+#[test]
+fn rejects_conflicting_tokens_or_roots() {
+    assert_eq!(
+        extract_prompt_token(
+            "RELAY_TOKEN: HELIOS-0009\nRELAY_TOKEN: HELIOS-0010"
+        ),
+        Err("prompt contains conflicting RELAY_TOKEN values".to_string())
+    );
+    assert_eq!(
+        extract_prompt_token("RELAY_ROOT: ORCHID\nRELAY_TOKEN: HELIOS-0009"),
+        Err("RELAY_ROOT ORCHID does not match RELAY_TOKEN HELIOS-0009".to_string())
+    );
+}
+
+#[test]
+fn rejects_missing_placeholder_or_malformed_literal_values() {
+    for prompt in [
+        "RELAY_ROOT: HELIOS",
+        "RELAY_TOKEN: {{issuedRelayToken}}",
+        "RELAY_TOKEN: HELIOS-00H9",
+        "RELAY_TOKEN: helios-0009",
+    ] {
+        assert!(extract_prompt_token(prompt).is_err(), "expected error: {prompt}");
+    }
+}
+
+#[test]
+fn marker_text_inside_a_larger_identifier_is_ignored() {
+    assert_eq!(
+        extract_prompt_token("NOT_RELAY_TOKEN: HELIOS-0009"),
+        Ok(None)
+    );
 }
 
 #[test]
