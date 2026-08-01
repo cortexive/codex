@@ -137,6 +137,31 @@ impl ChatWidget {
             );
             return (false, None);
         }
+
+        let is_shell_escape = shell_escape_policy == ShellEscapePolicy::Allow
+            && user_message.text.starts_with('!');
+        if !is_shell_escape {
+            match crate::cli::update_relay_token_from_prompt(&user_message.text) {
+                Ok(true) => {
+                    self.config.tui_status_line = crate::cli::relay_status_line_items(
+                        self.config.tui_status_line.take(),
+                        &DEFAULT_STATUS_LINE_ITEMS,
+                    );
+                    self.refresh_status_surfaces();
+                    self.request_redraw();
+                }
+                Ok(false) => {}
+                Err(message) => {
+                    self.add_error_message(format!("Relay token not accepted: {message}."));
+                    self.restore_user_message_to_composer(user_message_for_restore(
+                        user_message,
+                        &history_record,
+                    ));
+                    return (false, None);
+                }
+            }
+        }
+
         let UserMessage {
             text,
             local_images,
