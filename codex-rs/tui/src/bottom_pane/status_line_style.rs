@@ -124,11 +124,7 @@ where
     (!spans.is_empty()).then(|| Line::from(spans))
 }
 
-fn relay_footer_text(
-    item: StatusLineItem,
-    text: String,
-    relay_token: Option<&str>,
-) -> String {
+fn relay_footer_text(item: StatusLineItem, text: String, relay_token: Option<&str>) -> String {
     if item == StatusLineItem::ThreadTitle {
         relay_token.map_or(text, str::to_string)
     } else {
