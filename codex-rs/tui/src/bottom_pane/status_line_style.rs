@@ -27,6 +27,11 @@ enum StatusLineAccent {
     Progress,
 }
 
+enum StatusLineSegment {
+    RelayToken(String),
+    Configured(StatusLineItem, String),
+}
+
 impl StatusLineAccent {
     fn for_item(item: StatusLineItem) -> Self {
         match item {
@@ -90,6 +95,28 @@ where
     })
 }
 
+pub(crate) fn status_line_from_segments_with_prefix<I>(
+    prefix: Option<String>,
+    segments: I,
+    use_theme_colors: bool,
+) -> Option<Line<'static>>
+where
+    I: IntoIterator<Item = (StatusLineItem, String)>,
+{
+    let mut render_segments = Vec::new();
+    if let Some(prefix) = prefix {
+        render_segments.push(StatusLineSegment::RelayToken(prefix));
+    }
+    render_segments.extend(
+        segments
+            .into_iter()
+            .map(|(item, text)| StatusLineSegment::Configured(item, text)),
+    );
+    render_status_line_segments(render_segments, use_theme_colors, |accent| {
+        foreground_style_for_scopes(accent.scopes())
+    })
+}
+
 fn status_line_from_segments_with_resolver<I, F>(
     segments: I,
     use_theme_colors: bool,
@@ -99,20 +126,45 @@ where
     I: IntoIterator<Item = (StatusLineItem, String)>,
     F: Fn(StatusLineAccent) -> Option<Style>,
 {
+    render_status_line_segments(
+        segments
+            .into_iter()
+            .map(|(item, text)| StatusLineSegment::Configured(item, text)),
+        use_theme_colors,
+        theme_style_for_accent,
+    )
+}
+
+fn render_status_line_segments<I, F>(
+    segments: I,
+    use_theme_colors: bool,
+    theme_style_for_accent: F,
+) -> Option<Line<'static>>
+where
+    I: IntoIterator<Item = StatusLineSegment>,
+    F: Fn(StatusLineAccent) -> Option<Style>,
+{
     let mut spans = Vec::new();
-    for (item, text) in segments {
+    for segment in segments {
+        let (accent, underlined, text) = match segment {
+            StatusLineSegment::RelayToken(text) => (StatusLineAccent::Thread, false, text),
+            StatusLineSegment::Configured(item, text) => (
+                StatusLineAccent::for_item(item),
+                item == StatusLineItem::PullRequestNumber,
+                text,
+            ),
+        };
         if !spans.is_empty() {
             spans.push(STATUS_LINE_SEPARATOR.dim());
         }
         let style = if use_theme_colors {
-            let accent = StatusLineAccent::for_item(item);
             soften_status_line_style(
                 theme_style_for_accent(accent).unwrap_or_else(|| accent.fallback_style()),
             )
         } else {
             Style::default().dim()
         };
-        let style = if item == StatusLineItem::PullRequestNumber {
+        let style = if underlined {
             style.underlined()
         } else {
             style
@@ -209,6 +261,18 @@ mod tests {
         assert!(!line.spans[2].style.add_modifier.contains(Modifier::DIM));
         assert_eq!(line.spans[4].style.fg, Some(Color::Magenta));
         assert!(!line.spans[4].style.add_modifier.contains(Modifier::DIM));
+    }
+
+    #[test]
+    fn relay_prefix_preserves_configured_thread_title() {
+        let line = status_line_from_segments_with_prefix(
+            Some("ANVIL-0002".to_string()),
+            [(StatusLineItem::ThreadTitle, "native title".to_string())],
+            /*use_theme_colors*/ true,
+        )
+        .expect("status line");
+
+        assert_eq!(line_text(&line), "ANVIL-0002 · native title");
     }
 
     #[test]

@@ -62,6 +62,10 @@ impl ChatWidget {
         }
         self.flush_completed_hook_output();
         self.finish_active_hook_cell_if_idle();
+        // The completed UserPromptSubmit hook may have atomically projected
+        // new Task Manager status-line state for this thread. Refresh before
+        // the model turn proceeds so the accepted relay token is immediately visible.
+        self.refresh_status_surfaces();
         self.request_redraw();
     }
 
