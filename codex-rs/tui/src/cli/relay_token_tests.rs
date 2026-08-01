@@ -40,7 +40,8 @@ fn extracts_token_from_the_actual_compact_relay_prompt_shape() {
 
 #[test]
 fn accepts_repeated_identical_token_mentions() {
-    let prompt = "RELAY_ROOT: HELIOS\nRELAY_TOKEN: HELIOS-0009\nFinal line: RELAY_TOKEN: HELIOS-0009";
+    let prompt =
+        "RELAY_ROOT: HELIOS\nRELAY_TOKEN: HELIOS-0009\nFinal line: RELAY_TOKEN: HELIOS-0009";
 
     assert_eq!(
         extract_prompt_token(prompt),
@@ -56,9 +57,7 @@ fn leaves_ordinary_prompts_unbound() {
 #[test]
 fn rejects_conflicting_tokens_or_roots() {
     assert_eq!(
-        extract_prompt_token(
-            "RELAY_TOKEN: HELIOS-0009\nRELAY_TOKEN: HELIOS-0010"
-        ),
+        extract_prompt_token("RELAY_TOKEN: HELIOS-0009\nRELAY_TOKEN: HELIOS-0010"),
         Err("prompt contains conflicting RELAY_TOKEN values".to_string())
     );
     assert_eq!(
@@ -75,7 +74,10 @@ fn rejects_missing_placeholder_or_malformed_literal_values() {
         "RELAY_TOKEN: HELIOS-00H9",
         "RELAY_TOKEN: helios-0009",
     ] {
-        assert!(extract_prompt_token(prompt).is_err(), "expected error: {prompt}");
+        assert!(
+            extract_prompt_token(prompt).is_err(),
+            "expected error: {prompt}"
+        );
     }
 }
 
