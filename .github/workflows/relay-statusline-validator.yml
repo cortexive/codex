@@ -1,0 +1,154 @@
+name: Relay statusline exact-base validator
+
+on:
+  pull_request:
+    branches:
+      - validation/relay-statusline-435
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: relay-statusline-validator-codex
+  cancel-in-progress: true
+
+jobs:
+  apply-test-publish:
+    if: ${{ github.event.pull_request.head.sha == '475c6bbeb41d6e0eb2b1a877ebb8c28053b263d9' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      TARGET_BRANCH: ${{ github.event.pull_request.head.ref }}
+      VALIDATION_PR: ${{ github.event.pull_request.number }}
+
+    steps:
+      - name: Announce observable validation run
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${VALIDATION_PR}/comments" \
+            -f body="VALIDATION_RUN: started run_id=${GITHUB_RUN_ID} attempt=${GITHUB_RUN_ATTEMPT} source_head=${{ github.event.pull_request.head.sha }} url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+      - name: Checkout hash-bound bootstrap payload
+        uses: actions/checkout@v4
+        with:
+          ref: 475c6bbeb41d6e0eb2b1a877ebb8c28053b263d9
+          path: bootstrap
+          fetch-depth: 1
+
+      - name: Reconstruct and verify implementation bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64
+          import hashlib
+          import pathlib
+          import zipfile
+
+          parts = pathlib.Path('bootstrap/.github/relay-statusline-bootstrap')
+          encoded = b''.join(path.read_bytes() for path in sorted(parts.glob('relay-part-*')))
+          expected_encoded = 'a46254507de65efe9bbe047a1d33919d411cfd385310b767faac63bbb2cf2161'
+          actual_encoded = hashlib.sha256(encoded).hexdigest()
+          if actual_encoded != expected_encoded:
+              raise SystemExit(f'encoded bundle mismatch: {actual_encoded}')
+          archive = base64.b64decode(encoded, validate=True)
+          expected_archive = '70745fd45cfb34aa615d8614b08f505202be5da143e71d1c98b21662a78b0181'
+          actual_archive = hashlib.sha256(archive).hexdigest()
+          if actual_archive != expected_archive:
+              raise SystemExit(f'archive mismatch: {actual_archive}')
+          archive_path = pathlib.Path('/tmp/relay-statusline-implementation.zip')
+          archive_path.write_bytes(archive)
+          destination = pathlib.Path('/tmp/relay-statusline')
+          destination.mkdir(parents=True, exist_ok=True)
+          with zipfile.ZipFile(archive_path) as bundle:
+              bad_member = bundle.testzip()
+              if bad_member:
+                  raise SystemExit(f'corrupt archive member: {bad_member}')
+              bundle.extractall(destination)
+          PY
+
+      - name: Checkout exact frozen Codex source
+        uses: actions/checkout@v4
+        with:
+          ref: 6751b54cae32b23786001e2414d749a9916201e1
+          path: repo
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Apply exact-base transactional patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd repo
+          test "$(git rev-parse HEAD)" = '6751b54cae32b23786001e2414d749a9916201e1'
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          python /tmp/relay-statusline/relay-statusline-implementation/apply-codex-relay-statusline.py
+          git diff --check
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - name: Format and verify source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd repo/codex-rs
+          cargo fmt --all
+          cd ..
+          git diff --check
+
+      - name: Run focused relay projection tests
+        working-directory: repo/codex-rs
+        run: cargo test -p codex-tui cortex_statusline
+
+      - name: Compile Codex TUI
+        working-directory: repo/codex-rs
+        run: cargo check -p codex-tui
+
+      - name: Run Codex TUI clippy
+        working-directory: repo/codex-rs
+        run: cargo clippy -p codex-tui --all-targets --all-features -- -D warnings
+
+      - name: Commit source-only implementation and replace bootstrap branch
+        shell: bash
+        working-directory: repo
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          test -n "$(git status --porcelain)"
+          git commit \
+            -m 'feat(tui): project Task Manager relay state by active thread' \
+            -m 'Read only the active Codex thread atomic cache, prepend the accepted Task Manager relay token to the native footer, and refresh immediately after prompt-hook completion.' \
+            -m 'Refs cortexive/cortex#435. RELAY_TOKEN: ANVIL-0002'
+          git push --force origin "HEAD:refs/heads/${TARGET_BRANCH}"
+
+      - name: Report source publication
+        if: success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${VALIDATION_PR}/comments" \
+            -f body="VALIDATION_RUN: PASS; published source-only branch from run_id=${GITHUB_RUN_ID} url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+      - name: Report validation failure
+        if: failure()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${VALIDATION_PR}/comments" \
+            -f body="VALIDATION_RUN: FAIL run_id=${GITHUB_RUN_ID} attempt=${GITHUB_RUN_ATTEMPT} url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
