@@ -20,6 +20,12 @@ pub(crate) fn current() -> Option<String> {
         .clone()
 }
 
+pub(crate) fn clear() {
+    *relay_token_state()
+        .write()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+}
+
 pub(crate) fn initial_thread_title_seed() -> Option<String> {
     None
 }
