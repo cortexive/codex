@@ -7,6 +7,7 @@ use codex_utils_cli::SharedCliOptions;
 
 mod relay_token;
 
+pub(crate) use relay_token::apply_user_status_line_items as relay_user_status_line_items;
 pub(crate) use relay_token::clear as clear_relay_token;
 pub(crate) use relay_token::current as cortex_relay_token;
 pub(crate) use relay_token::status_line_items as relay_status_line_items;
