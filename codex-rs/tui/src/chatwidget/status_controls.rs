@@ -116,7 +116,7 @@ impl ChatWidget {
         );
         let ids = items.iter().map(ToString::to_string).collect::<Vec<_>>();
         self.config.tui_status_line =
-            crate::cli::relay_status_line_items(Some(ids), &DEFAULT_STATUS_LINE_ITEMS);
+            crate::cli::relay_user_status_line_items(Some(ids), &DEFAULT_STATUS_LINE_ITEMS);
         self.config.tui_status_line_use_colors = use_theme_colors;
         self.refresh_status_line();
     }
