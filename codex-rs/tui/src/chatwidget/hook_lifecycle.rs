@@ -1,6 +1,6 @@
 //! Hook run lifecycle handling for `ChatWidget`.
 //!
-//! This module keeps active hook cells, hook timers, and hook completion output
+//! This module keeps active hook cells, hook timers, hook completion output
 //! together.
 
 use super::*;
@@ -35,8 +35,12 @@ impl ChatWidget {
 
     pub(super) fn on_hook_completed(
         &mut self,
-        completed: codex_app_server_protocol::HookRunSummary,
+        mut completed: codex_app_server_protocol::HookRunSummary,
     ) {
+        if let Some(update) = take_cortex_relay_update(&mut completed) {
+            self.apply_cortex_relay_update(update);
+        }
+
         let completed_existing_run = self
             .active_hook_cell
             .as_mut()
@@ -62,6 +66,38 @@ impl ChatWidget {
         }
         self.flush_completed_hook_output();
         self.finish_active_hook_cell_if_idle();
+        self.request_redraw();
+    }
+
+    fn apply_cortex_relay_update(&mut self, update: crate::status::CortexRelayUpdate) {
+        match update {
+            crate::status::CortexRelayUpdate::Set(token) => {
+                let restore_explicit_empty_status_line = self
+                    .config
+                    .tui_status_line
+                    .as_ref()
+                    .is_some_and(Vec::is_empty);
+                if restore_explicit_empty_status_line {
+                    self.config.tui_status_line = Some(vec!["thread-title".to_string()]);
+                }
+                crate::status::set_cortex_relay_token(
+                    token,
+                    restore_explicit_empty_status_line,
+                );
+            }
+            crate::status::CortexRelayUpdate::Clear => {
+                let restore_explicit_empty_status_line =
+                    crate::status::clear_cortex_relay_token();
+                if restore_explicit_empty_status_line
+                    && self.config.tui_status_line.as_ref().is_some_and(|items| {
+                        items.len() == 1 && items[0] == "thread-title"
+                    })
+                {
+                    self.config.tui_status_line = Some(Vec::new());
+                }
+            }
+        }
+        self.refresh_status_surfaces();
         self.request_redraw();
     }
 
@@ -140,4 +176,21 @@ impl ChatWidget {
         let delay = deadline.saturating_duration_since(Instant::now());
         self.frame_requester.schedule_frame_in(delay);
     }
+}
+
+fn take_cortex_relay_update(
+    completed: &mut codex_app_server_protocol::HookRunSummary,
+) -> Option<crate::status::CortexRelayUpdate> {
+    let mut update = None;
+    completed.entries.retain(|entry| {
+        if entry.kind != codex_app_server_protocol::HookOutputEntryKind::Warning {
+            return true;
+        }
+        let Some(parsed) = crate::status::parse_cortex_relay_message(&entry.text) else {
+            return true;
+        };
+        update = Some(parsed);
+        false
+    });
+    update
 }
